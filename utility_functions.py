@@ -1,42 +1,10 @@
-# Utility functions
-
 import os
-import math
 import numpy as np
 import datetime
-import time
-import winsound
-import sys
-from urllib import request
-import shutil
-from typing import List, Union
-
-import os
-import math
-import time
-import logging
-import warnings
-import numpy as np
-import datetime
-from getpass import getpass
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpl_patches
-from scipy.optimize import curve_fit, leastsq
-# from progressbar import IncrementalBar
-from tqdm import tqdm
-import winsound
 import pandas as pd
-
-# from quantuminspire.api import QuantumInspireAPI
-# from quantuminspire.version import __version__ as quantum_inspire_version
-# from quantuminspire.credentials import load_account, get_token_authentication, get_basic_authentication, save_account
-
-from qiskit import QuantumCircuit
 from qiskit_quantuminspire.qi_provider import QIProvider
-import matplotlib.pyplot as plt
-import numpy as np
 
-def PrepFile(basename: str="", suffix: str="", doraw: int=0):
+def prepare_file(basename: str="", suffix: str="", doraw: int=0):
     '''
     Creates the file name according to the basename and suffix that you provide.
     '''
@@ -60,30 +28,31 @@ def PrepFile(basename: str="", suffix: str="", doraw: int=0):
         return histname, circuitname, rawname
 
 
-def GetTimeStamp():
+def get_timestamp():
     '''
     Returns the timestamp of the current date and time
     '''
     current_date = datetime.datetime.now()
-    thisyear=str(current_date.year);
-    thismonth="0"+str(current_date.month);
-    thisday="0"+str(current_date.day);
-    thishour="0"+str(current_date.hour);
-    thisminute="0"+str(current_date.minute);
-    thissecond="0"+str(current_date.second);
+    thisyear=str(current_date.year)
+    thismonth="0"+str(current_date.month)
+    thisday="0"+str(current_date.day)
+    thishour="0"+str(current_date.hour)
+    thisminute="0"+str(current_date.minute)
+    thissecond="0"+str(current_date.second)
     timestamp=thisyear[-2:]+thismonth[-2:]+thisday[-2:]+"_"+thishour[-2:]+thisminute[-2:]+thissecond[-2:]
     return timestamp
 
-def NewDay():
+def new_day():
     '''
     Crates the folder with the current date in the specified path.
     '''
-    todaypath = r'C:\Users\rdicarlo\OneDrive - Delft University of Technology\Desktop\Delft\QI_2.0\Data' # Write here the path of the folder you want to save your data in
+    todaypath = r'C:\Users\rdicarlo\OneDrive - Delft University of Technology\Desktop\Delft\QI_2.0\Data'
+    # Write above the path of the folder you want to save your data in
 
     current_date = datetime.date.today()
-    thisyear=str(current_date.year);
-    thismonth="0"+str(current_date.month);
-    thisday="0"+str(current_date.day);
+    thisyear=str(current_date.year)
+    thismonth="0"+str(current_date.month)
+    thisday="0"+str(current_date.day)
     todaypath+="/Data_"+thisyear[-2:]+thismonth[-2:]+thisday[-2:]
 
     try:
@@ -96,7 +65,10 @@ def NewDay():
     os.chdir(todaypath)  # change the current working directory to the specified path
     return todaypath
 
-def API_RunAndSave(param, Qcircuit, histname: str="hist.txt", circuit_name: str="cqasm.txt", shots: int=16384, backend_name: str='Starmon 7', get_results: bool=True, get_hist_data: bool=False, measurement_list: list=[], get_raw_data: bool=False, rawdata_filename: str="rawdata"):
+def api_run_and_save(param, Qcircuit, histname: str="hist.txt", circuit_name: str="cqasm.txt",
+                   shots: int=16384, backend_name: str='Starmon 7', get_results: bool=True,
+                   get_hist_data: bool=False, measurement_list: list=[],
+                   get_raw_data: bool=False, rawdata_filename: str="rawdata"):
     '''
     Runs QI with qiskit program and returns histogram and the raw data
     A copy of the cqasm program is saved to file circuit_name.
@@ -104,19 +76,26 @@ def API_RunAndSave(param, Qcircuit, histname: str="hist.txt", circuit_name: str=
     param:              a reference number that you are free to choose.
     Qcircuit:           Qiskit quantum circuit.
     histname:           file name where you want to save the histogram data.
-    measurement_list:   each entry of the list is equal to the number of measurements done simultaneously in the algorithm.
-                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of the classical bit string is the result of a single measurement,
-                        the second and the third entries of the classical bit string are measured together and the last one is measured alone again.                        
+    measurement_list:   each entry of the list is equal to the number of measurements done
+                        simultaneously in the algorithm.
+                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of the
+                        classical bit string is the result of a single measurement,
+                        the second and the third entries of the classical bit string are measured together
+                        and the last one is measured alone again.                        
     circuit_name:       name of the file in which you want to save the quantum circuit.
     shots:              desired number of shots. For Starmon-5, the max is 16384.
     backend_name:       specify the name of the backend that you want to use.
     get_results:        False: do not return the measurement result
                         True: return the measurement result
     get_hist_data:      False: do not return the histogram data
-                        True: return the histogram data (if this is True make sure to specify the measurement_list)
-    measurement_list:   each entry of the list is equal to the number of measurements done simultaneously in the algorithm.
-                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of the classical bit string is the result of a single measurement,
-                        the second and the third entries of the classical bit string are measured together and the last one is measured alone again.                        
+                        True: return the histogram data (if this is True make sure to specify
+                        the measurement_list)
+    measurement_list:   each entry of the list is equal to the number of measurements done
+                        simultaneously in the algorithm.
+                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of
+                        the classical bit string is the result of a single measurement,
+                        the second and the third entries of the classical bit string are
+                        measured together and the last one is measured alone again.                        
     get_raw_data:       False: do not return the raw data
                         True: return the raw data
     rawdata_filename:   name of the raw data file you want to save
