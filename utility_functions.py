@@ -1,40 +1,8 @@
-# Utility functions
-
 import os
-import math
 import numpy as np
 import datetime
-import time
-import winsound
-import sys
-from urllib import request
-import shutil
-from typing import List, Union
-
-import os
-import math
-import time
-import logging
-import warnings
-import numpy as np
-import datetime
-from getpass import getpass
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpl_patches
-from scipy.optimize import curve_fit, leastsq
-# from progressbar import IncrementalBar
-from tqdm import tqdm
-import winsound
 import pandas as pd
-
-# from quantuminspire.api import QuantumInspireAPI
-# from quantuminspire.version import __version__ as quantum_inspire_version
-# from quantuminspire.credentials import load_account, get_token_authentication, get_basic_authentication, save_account
-
-from qiskit import QuantumCircuit
 from qiskit_quantuminspire.qi_provider import QIProvider
-import matplotlib.pyplot as plt
-import numpy as np
 
 def PrepFile(basename: str="", suffix: str="", doraw: int=0):
     '''
@@ -65,12 +33,12 @@ def GetTimeStamp():
     Returns the timestamp of the current date and time
     '''
     current_date = datetime.datetime.now()
-    thisyear=str(current_date.year);
-    thismonth="0"+str(current_date.month);
-    thisday="0"+str(current_date.day);
-    thishour="0"+str(current_date.hour);
-    thisminute="0"+str(current_date.minute);
-    thissecond="0"+str(current_date.second);
+    thisyear=str(current_date.year)
+    thismonth="0"+str(current_date.month)
+    thisday="0"+str(current_date.day)
+    thishour="0"+str(current_date.hour)
+    thisminute="0"+str(current_date.minute)
+    thissecond="0"+str(current_date.second)
     timestamp=thisyear[-2:]+thismonth[-2:]+thisday[-2:]+"_"+thishour[-2:]+thisminute[-2:]+thissecond[-2:]
     return timestamp
 
@@ -78,12 +46,12 @@ def NewDay():
     '''
     Crates the folder with the current date in the specified path.
     '''
-    todaypath = r'C:\Users\rdicarlo\OneDrive - Delft University of Technology\Desktop\Delft\QI_2.0\Data' # Write here the path of the folder you want to save your data in
+    todaypath = r'[...]' # Write here the path of the folder you want to save your data in
 
     current_date = datetime.date.today()
-    thisyear=str(current_date.year);
-    thismonth="0"+str(current_date.month);
-    thisday="0"+str(current_date.day);
+    thisyear=str(current_date.year)
+    thismonth="0"+str(current_date.month)
+    thisday="0"+str(current_date.day)
     todaypath+="/Data_"+thisyear[-2:]+thismonth[-2:]+thisday[-2:]
 
     try:
