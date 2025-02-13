@@ -1,10 +1,10 @@
 import os
 import numpy as np
-import datetime
+from datetime import datetime
 import pandas as pd
 from qiskit_quantuminspire.qi_provider import QIProvider
 
-def PrepFile(basename: str="", suffix: str="", doraw: int=0):
+def prepare_file(basename: str="", suffix: str="", doraw: int=0):
     '''
     Creates the file name according to the basename and suffix that you provide.
     '''
@@ -42,29 +42,71 @@ def GetTimeStamp():
     timestamp=thisyear[-2:]+thismonth[-2:]+thisday[-2:]+"_"+thishour[-2:]+thisminute[-2:]+thissecond[-2:]
     return timestamp
 
-def NewDay():
+def create_new_data_folder(datadir):
     '''
     Crates the folder with the current date in the specified path.
     '''
-    todaypath = r'[...]' # Write here the path of the folder you want to save your data in
-
-    current_date = datetime.date.today()
-    thisyear=str(current_date.year)
-    thismonth="0"+str(current_date.month)
-    thisday="0"+str(current_date.day)
-    todaypath+="/Data_"+thisyear[-2:]+thismonth[-2:]+thisday[-2:]
-
+    data_folder_path = datadir + "/Data"
     try:
-        os.mkdir(todaypath)
-    except OSError:
-        print ("Creation of the directory %s failed" % todaypath)
-    else:
-        print ("Successfully created the directory %s " % todaypath)
-    
-    os.chdir(todaypath)  # change the current working directory to the specified path
-    return todaypath
+        os.makedirs(data_folder_path, exist_ok=False)
+    except:
+        print("Data folder already exists")
 
-def API_RunAndSave(param, Qcircuit, histname: str="hist.txt", circuit_name: str="cqasm.txt", shots: int=16384, backend_name: str='Starmon 7', get_results: bool=True, get_hist_data: bool=False, measurement_list: list=[], get_raw_data: bool=False, rawdata_filename: str="rawdata"):
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d")
+    today_path = data_folder_path + f"/{timestamp}"
+    try:
+        os.makedirs(today_path, exist_ok=False)
+    except:
+        print(f"Folder with timestamp {timestamp} already exists")
+    
+    os.chdir(today_path)  # change the current working directory to the specified path
+    return today_path
+
+def return_raw_data(qc, result):
+
+    bit_register_size = qc.num_clbits
+    raw_data = result.get_memory()
+    for entry in range(len(raw_data)):
+        additional_len = bit_register_size - len(raw_data[entry])
+        for i in range(additional_len):
+            raw_data[entry] = '0' + raw_data[entry]
+
+    return raw_data
+
+def get_raw_data_counts(qc, result):
+
+    raw_data = return_raw_data(qc, result)
+    raw_data_counts = []
+
+    bit_register_size = len(raw_data[0])
+    measurement_shots = len(raw_data)
+    for bit_index in range(bit_register_size):
+        counter_0 = 0
+        counter_1 = 0
+        for meas_index in range(measurement_shots):
+            if raw_data[meas_index][-bit_index-1] == '0':
+                counter_0 += 1
+            if raw_data[meas_index][-bit_index-1] == '1':
+                counter_1 += 1
+        raw_data_counts.append({'0': counter_0, '1': counter_1})
+    
+    return raw_data_counts
+
+def get_raw_data_prob(qc, result):
+    raw_data_counts = get_raw_data_counts(qc, result)
+    raw_data_prob = []
+
+    measurement_shots = raw_data_counts[0]['0'] + raw_data_counts[0]['1']
+
+    for entry in range(len(raw_data_counts)):
+        prob_0 = raw_data_counts[entry]['0'] / measurement_shots
+        prob_1 = raw_data_counts[entry]['1'] / measurement_shots
+
+        raw_data_prob.append({'prob(0)': prob_0, 'prob(1)': prob_1})
+    return raw_data_prob
+
+def api_run_and_save(param, Qcircuit, histname: str="hist.txt", circuit_name: str="cqasm.txt", shots: int=16384, backend_name: str='Starmon 7', get_results: bool=True, get_hist_data: bool=False, measurement_list: list=[], get_raw_data: bool=False, rawdata_filename: str="rawdata"):
     '''
     Runs QI with qiskit program and returns histogram and the raw data
     A copy of the cqasm program is saved to file circuit_name.
