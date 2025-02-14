@@ -1,5 +1,9 @@
 # QuantumInspireUtilities
-Utility functions for Quantum Inspire (Q.I.) 2.0, tailored for the quantum processor Starmon-7.
+Utility functions for Quantum Inspire (QI) 2.0, tailored for the quantum processor Starmon-7.
+
+## Cloning this repository
+In order to use the code in this repository, you will need a GitHub account in order to pull the project.
+For new users, we recommend to download [GitHub Desktop](https://desktop.github.com/download/), and then clone the repository by using the link https://github.com/DiCarloLab-Delft/QuantumInspireUtilities.git.
 
 ## Tested instructions for creating a Python environment compatible with the QI SDK
 1. Install Anaconda or Miniconda (lightweight version of Anaconda) in your computer, https://www.anaconda.com/
