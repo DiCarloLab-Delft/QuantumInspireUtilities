@@ -19,6 +19,8 @@ For new users, we recommend to download [GitHub Desktop](https://desktop.github.
 - pip install pandas
 - pip install pylatexenc
 
+Note: in order to run the method backend.coupling_map.draw(), you will need to install Graphviz in your computer. Follow the link https://graphviz.org/download/#executable-packages to do so. Make sure during installation to add Graphviz to the system PATH, so that your Python environment can recognize it.
+
 Once the above steps are done, open Anaconda Prompt (or Terminal in UNIX), activate the environment,
 and type "jupyter notebook". This should open a Jupyter notebook page in your browser, and you will be able to use the QI SDK.
 
