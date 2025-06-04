@@ -63,10 +63,10 @@ def create_new_data_folder(datadir):
     os.chdir(today_path)  # change the current working directory to the specified path
     return today_path
 
-def return_raw_data(qc, result):
+def return_raw_data(qc, result, circuit_nr: int = None):
 
     bit_register_size = qc.num_clbits
-    raw_data = result.get_memory()
+    raw_data = result.get_memory(circuit_nr)
     for entry in range(len(raw_data)):
         additional_len = bit_register_size - len(raw_data[entry])
         for i in range(additional_len):
@@ -74,9 +74,9 @@ def return_raw_data(qc, result):
 
     return raw_data
 
-def get_raw_data_counts(qc, result):
+def get_raw_data_counts(qc, result, circuit_nr: int = None):
 
-    raw_data = return_raw_data(qc, result)
+    raw_data = return_raw_data(qc, result, circuit_nr)
     raw_data_counts = []
 
     bit_register_size = len(raw_data[0])
@@ -93,8 +93,8 @@ def get_raw_data_counts(qc, result):
     
     return raw_data_counts
 
-def get_raw_data_prob(qc, result):
-    raw_data_counts = get_raw_data_counts(qc, result)
+def get_raw_data_prob(qc, result, circuit_nr: int = None):
+    raw_data_counts = get_raw_data_counts(qc, result, circuit_nr)
     raw_data_prob = []
 
     measurement_shots = raw_data_counts[0]['0'] + raw_data_counts[0]['1']
