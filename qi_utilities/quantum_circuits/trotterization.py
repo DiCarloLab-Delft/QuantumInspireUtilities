@@ -1,6 +1,7 @@
 from scipy.linalg import expm
 from qiskit import QuantumCircuit
 import qiskit.quantum_info as qi
+from qi_utilities.utility_functions.circuit_modifiers import apply_pre_measurement_rotations
 
 def trotter_block(quantum_circuit, Hamiltonian, n_order, time):
     Hamiltonian = Hamiltonian[::-1]
