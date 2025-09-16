@@ -1,9 +1,13 @@
 # QuantumInspireUtilities
 Utility functions that supplement the [Quantum Inspire 2.0](https://www.quantum-inspire.com/) Python SDK, tailored for the superconducting backends Starmon-7 and Tuna-5.
 
-## Cloning this repository
+## Cloning and installing this repository
 In order to use the functions in this repository, you will need a GitHub account in order to pull the project.
 For new users, we recommend downloading [GitHub Desktop](https://desktop.github.com/download/), and then cloning the repository by using the link https://github.com/DiCarloLab-Delft/QuantumInspireUtilities.git.
+
+After creating a working Python environment (see below), use the following pip command inside the repository directory to install,
+
+python -m pip install -e .
 
 ## Tested instructions for creating a Python environment compatible with the QI SDK
 1. [Install pipx](https://pipx.pypa.io/stable/installation/) (used when installing quantuminspire package)
