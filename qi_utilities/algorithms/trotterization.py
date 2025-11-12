@@ -1,34 +1,33 @@
 from scipy.linalg import expm
 from qiskit import QuantumCircuit
 import qiskit.quantum_info as qi
+from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.quantum_info import SparsePauliOp, DensityMatrix, Operator
 from qi_utilities.utility_functions.circuit_modifiers import apply_pre_measurement_rotations
 
-def trotter_block(quantum_circuit, Hamiltonian, n_order, time):
+def trotter_block(quantum_circuit,
+                  Hamiltonian: SparsePauliOp,
+                  n_order,
+                  time_step):
     Hamiltonian = Hamiltonian[::-1]
     for entry in range(len(Hamiltonian)):
-        pauli_string = Hamiltonian.to_list()[entry][0]
+        pauli_string = Hamiltonian[entry].paulis.to_labels()[0]
 
         string_to_list = list(pauli_string)
         target_qubits = []
-        pauli_list = []
         qubit_counter = 0
         for index in reversed(range(len(string_to_list))):
             if string_to_list[index] == 'I':
                 pass
             else:
                 target_qubits.append(qubit_counter)
-                pauli_list.append(string_to_list[index])
             qubit_counter += 1
-        pauli_list.reverse()
-        pauli_term = "".join(pauli_list)
 
-        pauli_matrix = qi.Operator(qi.Pauli(pauli_term)).to_matrix()
-        pauli_coefficient = Hamiltonian.to_list()[entry][1]
-        pauli_exponentiate = expm(- 1j * pauli_coefficient * pauli_matrix * (time / n_order))
-        unitary_gate = qi.Operator(pauli_exponentiate).to_instruction()
-        unitary_gate.name = 'Trotter block,' + f' Pauli: {pauli_string}'.upper() + \
-            f'\nn = {n_order},' + f' Time = {time*1e9:.2f} ns'
-
+        unitary_label = 'Trotter block,' + f' Pauli: {pauli_string}' + \
+                        f'\nn = {n_order},' + f' Time = {time_step*1e9:.2f} ns'
+        unitary_gate = PauliEvolutionGate(operator = Hamiltonian[entry],
+                                          time = time_step / n_order,
+                                          label = unitary_label)
         quantum_circuit.append(unitary_gate, target_qubits)
 
 

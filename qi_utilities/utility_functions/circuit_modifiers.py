@@ -1,6 +1,23 @@
 import numpy as np
 from qiskit import QuantumCircuit, ClassicalRegister
 
+def initialization(quantum_circuit: QuantumCircuit,
+                   nr_qubits: int,
+                   initial_state: str):
+    
+    quantum_circuit.barrier()
+    for idx in range(nr_qubits):
+        quantum_circuit.reset(idx)
+    quantum_circuit.barrier()
+
+    if len(initial_state) != nr_qubits:
+        raise ValueError('Initial state must have same number of qubits defined.')
+    for idx in range(len(initial_state)):
+        if initial_state[idx] == '1':
+            quantum_circuit.x((nr_qubits-1) - idx)
+    quantum_circuit.barrier()
+
+    return quantum_circuit
 
 def apply_pre_measurement_rotations(qc: QuantumCircuit,
                                     observable: str,

@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.optimize import minimize
-from midcircuit_msmt import obtain_binary_list
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
+from qi_utilities.utility_functions.midcircuit_msmt import obtain_binary_list, get_multi_qubit_counts
 
 
 def split_raw_shots(result,
@@ -75,3 +77,49 @@ def extract_ro_assignment_matrix(ro_mitigation_shots,
     assignment_probability_matrix = assignment_matrix / len(ro_mitigation_shots)
     # Tim's code ends here
     return assignment_probability_matrix
+
+def plot_ro_assignment_matrix(ro_assignment_matrix,
+                              nr_qubits: int):
+
+    binary_labels = []
+    for binary_str_idx in range(2**nr_qubits):
+        binary_labels.append(np.binary_repr(binary_str_idx, nr_qubits))
+
+    fig_size = max(6, len(binary_labels) * 0.4)
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size), dpi=300)
+
+    ax.set_xticks(np.arange(len(binary_labels)))
+    ax.set_yticks(np.arange(len(binary_labels)))
+    ax.set_xticklabels(binary_labels)
+    ax.set_yticklabels(binary_labels)
+
+    base_fontsize = max(3, 14 - 0.2 * len(binary_labels))
+    ax.tick_params(axis="x", labelsize=base_fontsize)
+    ax.tick_params(axis="y", labelsize=base_fontsize)
+    ax.tick_params(axis='x', rotation=60)
+
+    ax.xaxis.tick_top()
+    ax.set_xlabel("Declared state")
+    ax.xaxis.set_label_position('top')
+    ax.set_ylabel("Prepared state")
+    ax.set_title("Readout assignment matrix")
+
+    plt.setp(ax.get_xticklabels(), ha="center")
+
+    values = np.zeros((len(binary_labels), len(binary_labels)))
+    for i in range(len(binary_labels)):
+        for j in range(len(binary_labels)):
+            values[i, j] = ro_assignment_matrix[i, j] * 100
+            cell_fontsize = max(2, 10 - 0.15 * len(binary_labels))
+            txt = ax.text(j, i, f"{values[i, j]:.1f}%", ha="center", va="center",
+                    color="white", fontweight="bold", fontsize=cell_fontsize)
+            txt.set_path_effects([
+                path_effects.Stroke(linewidth=2, foreground="black"),
+                path_effects.Normal()
+            ])
+
+    cax = ax.imshow(values, cmap="Greens", vmin=0, vmax=100)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Probability (%)")
+
+    plt.tight_layout()
+    plt.show()
