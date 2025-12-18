@@ -43,9 +43,10 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
 
 
 def apply_readout_circuit(qc: QuantumCircuit,
-                          nr_qubits: int):
+                          qubit_list: list):
 
-    readout_circuit = QuantumCircuit(nr_qubits, qc.num_clbits + 2**(nr_qubits+1), name=qc.name)
+    nr_qubits = len(qubit_list)
+    readout_circuit = QuantumCircuit(qc.num_qubits, qc.num_clbits + 2**(nr_qubits+1), name=qc.name)
 
     binary_list = []
     for binary_str_idx in range(2**nr_qubits):
@@ -53,19 +54,22 @@ def apply_readout_circuit(qc: QuantumCircuit,
 
     for binary_str_idx in range(len(binary_list)):
 
-        for qubit_idx in range(nr_qubits):
+        reversed_binary_string = binary_list[binary_str_idx][::-1]
+
+        for qubit_idx in qubit_list:
             readout_circuit.reset(qubit_idx)
 
-        for idx in range(len(binary_list[binary_str_idx])):
-            if binary_list[binary_str_idx][idx] == '1':
-                readout_circuit.x((nr_qubits-1) - idx)
+        for idx in range(len(reversed_binary_string)):
+            if reversed_binary_string[idx] == '1':
+                readout_circuit.x(qubit_list[idx])
         readout_circuit.barrier()
 
-        readout_circuit.measure(list(np.arange(stop=nr_qubits, step=1)),
+        readout_circuit.measure(qubit_list,
                                 list(np.arange(start=qc.num_clbits + binary_str_idx*nr_qubits,
                                                stop=qc.num_clbits + (binary_str_idx+1)*nr_qubits, step=1)))
         readout_circuit.barrier()
 
+    qc.barrier()
     additional_bits = ClassicalRegister(2**(nr_qubits+1))
     qc.add_bits(additional_bits)
     return readout_circuit.compose(qc, front=True)

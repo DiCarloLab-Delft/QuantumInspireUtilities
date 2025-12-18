@@ -46,5 +46,5 @@ def get_raw_data_prob(qc: QuantumCircuit,
         prob_0 = raw_data_counts[entry]['0'] / measurement_shots
         prob_1 = raw_data_counts[entry]['1'] / measurement_shots
 
-        raw_data_prob.append({'prob(0)': prob_0, 'prob(1)': prob_1})
+        raw_data_prob.append({'0': prob_0, '1': prob_1})
     return raw_data_prob

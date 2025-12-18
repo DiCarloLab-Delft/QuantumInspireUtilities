@@ -9,15 +9,19 @@ def obtain_binary_list(nr_qubits: int):
 
 def get_multi_qubit_counts(shots,
                            nr_qubits: int):
-
+    """
+    Returns a list with containing entries of all count dictionaries for
+    each midcircuit measurement block.
+    e.g. total_counts[0] contains the counts dictionary for the very first
+    measurement block.
+    """
     binary_list = obtain_binary_list(nr_qubits)
 
-    counts = []
+    total_counts = []
 
-    mid_circuit_meas_nr = len(shots[0])
-    iterations = int(mid_circuit_meas_nr / nr_qubits)
+    mid_circuit_blocks_nr = int(len(shots[0]) / nr_qubits)
 
-    for mcm_block_idx in range(iterations):
+    for mcm_block_idx in range(mid_circuit_blocks_nr):
 
         counts_dict = {}
         for entry in binary_list:
@@ -33,8 +37,8 @@ def get_multi_qubit_counts(shots,
             binary_string = np.binary_repr(int(binary_string, 2), nr_qubits)
             counts_dict[binary_string] += 1
 
-        counts.append(counts_dict)
-    return counts
+        total_counts.append(counts_dict)
+    return total_counts
 
 def get_multi_qubit_prob(counts):
 
