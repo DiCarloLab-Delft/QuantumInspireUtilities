@@ -55,6 +55,6 @@ In order to create your first quantum circuit using the Quantum Inspire SDK, vis
 ## 3. TODOs
 [2025-12-19] Current list of targeted upcoming new features:
 
-* Create a function which stores locally the raw data of a job, including all quantum circuits, raw data shots, and other useful metadata.
+* Create a data-handling system for storing locally the raw data of a job, including all quantum circuits and other useful metadata.
 * Document extensively existing functions of the repository.
 * Create a notebook guide on variational quantum algorithms.
