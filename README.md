@@ -51,3 +51,10 @@ Once the above steps are done, open Anaconda Prompt (or Terminal in UNIX), activ
 and type 'jupyter notebook'. This should open a Jupyter notebook page in your browser, and you will be able to use the QI SDK.
 
 In order to create your first quantum circuit using the Quantum Inspire SDK, visit https://qutech-delft.github.io/qiskit-quantuminspire/getting_started/submitting.html.
+
+## 3. TODOs
+[2025-12-19] Current list of targeted upcoming new features:
+
+* Create a function which stores locally the raw data of a job, including all quantum circuits, raw data shots, and other useful metadata.
+* Document extensively existing functions of the repository.
+* Create a notebook guide on variational quantum algorithms.
