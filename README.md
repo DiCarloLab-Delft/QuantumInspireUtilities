@@ -21,7 +21,7 @@ Note: this installation method is typically not recommended, but is nevertheless
 
 Installing quantuminspire within the conda environment restricts the command 'qi login' to be recognized and used only within the created environment.
 
-### 1.2. Advanced installation
+### 1.2. Advanced installation (recommended)
 
 1. [Install pipx](https://pipx.pypa.io/stable/installation/) (used when installing quantuminspire package)
 2. [Install quantuminspire repository](https://github.com/QuTech-Delft/quantuminspire?tab=readme-ov-file) (used for login)
