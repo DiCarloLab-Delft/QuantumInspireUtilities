@@ -1,3 +1,9 @@
+"""
+NOTE: this file contains legacy code which was used originally with Quantum Inspire (QI) 1.0,
+and has now been translated in order to be used with QI 2.0.
+Apart from the translation to QI 2.0, this code and format are not being currently supported.
+"""
+
 import os
 import numpy as np
 from datetime import datetime
