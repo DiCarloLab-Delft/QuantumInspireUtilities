@@ -81,17 +81,15 @@ def api_run_and_save(param,
                      get_hist_data: bool=False,
                      measurement_list: list=[],
                      get_raw_data: bool=False,
-                     rawdata_filename: str="rawdata"):
+                     rawdata_filename: str="rawdata",
+                     timeout: int = 1200):
     '''
     Runs QI with qiskit program and returns histogram and the raw data
     A copy of the cqasm program is saved to file circuit_name.
 
     param:              a reference number that you are free to choose.
     Qcircuit:           Qiskit quantum circuit.
-    histname:           file name where you want to save the histogram data.
-    measurement_list:   each entry of the list is equal to the number of measurements done simultaneously in the algorithm.
-                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of the classical bit string is the result of a single measurement,
-                        the second and the third entries of the classical bit string are measured together and the last one is measured alone again.                        
+    histname:           file name where you want to save the histogram data.                        
     circuit_name:       name of the file in which you want to save the quantum circuit.
     shots:              desired number of shots. For Starmon-5, the max is 16384.
     backend_name:       specify the name of the backend that you want to use.
@@ -100,8 +98,8 @@ def api_run_and_save(param,
     get_hist_data:      False: do not return the histogram data
                         True: return the histogram data (if this is True make sure to specify the measurement_list)
     measurement_list:   each entry of the list is equal to the number of measurements done simultaneously in the algorithm.
-                        e.g. measurement_list = [1, 2, 1], it means that the rightmost entry of the classical bit string is the result of a single measurement,
-                        the second and the third entries of the classical bit string are measured together and the last one is measured alone again.                        
+                        e.g. measurement_list = [4, 2, 1], it means that the rightmost entry of the classical bit string is the result of a single measurement,
+                        the second and the third entries of the classical bit string are measured together and the last four are measured together.                        
     get_raw_data:       False: do not return the raw data
                         True: return the raw data
     rawdata_filename:   name of the raw data file you want to save
@@ -115,7 +113,7 @@ def api_run_and_save(param,
 
     # Run the job
     job = backend.run(Qcircuit, shots = shots, memory = get_raw_data)
-    results = job.result(timeout = 600) # get the results
+    results = job.result(timeout = timeout) # get the results
 
     # Get and save the histogram data
     if get_hist_data:
