@@ -71,7 +71,7 @@ def extract_ro_assignment_matrix(ro_mitigation_shots,
     
     ro_counts_per_prepared_states = get_multi_qubit_counts(ro_mitigation_shots, nr_qubits)
 
-    assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float_)
+    assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float64)
 
     for prepared_state_idx in range(len(prepared_states)):
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
