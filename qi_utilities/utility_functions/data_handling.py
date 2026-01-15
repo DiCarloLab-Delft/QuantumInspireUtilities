@@ -4,11 +4,10 @@ import h5py
 import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import ImageFilter
-from zoneinfo import ZoneInfo
 from qiskit import qasm3
 from qiskit_quantuminspire.cqasm import dumps
 
-class StoreJobRecord:
+class StoreProjectRecord:
 
     def __init__(self,
                  job):
@@ -23,15 +22,15 @@ class StoreJobRecord:
             if self.raw_data_memory == True:
                 self.store_raw_data(job, job_idx)
 
-        return print("Success!")
+        return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}")
 
     def create_project_directory(self,
                                  job):
         
-        self.timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished
-        self.timestamp = self.timestamp_utc.astimezone()
-        self.date_timestamp = self.timestamp.strftime("%Y%m%d")
-        self.job_0_timestamp = self.timestamp.strftime("%H%M%S")
+        timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished
+        timestamp = timestamp_utc.astimezone()
+        self.date_timestamp = timestamp.strftime("%Y%m%d")
+        self.job_0_timestamp = timestamp.strftime("%H%M%S")
 
         self.project_name = job.program_name
         self.project_dir = (
@@ -50,22 +49,25 @@ class StoreJobRecord:
             self.backend_operations.append(str(job.backend().operations[entry]))
         self.backend_max_shots = job.backend().max_shots
 
-        figure = job.backend().coupling_map.draw()
-        image = figure.resize((800, 800))
-        sharpened = image.filter(ImageFilter.SHARPEN)
-        image_array = np.array(sharpened)
+        try: # since the user may have used an emulator
+            figure = job.backend().coupling_map.draw()
+            image = figure.resize((800, 800))
+            sharpened = image.filter(ImageFilter.SHARPEN)
+            image_array = np.array(sharpened)
 
-        file_path = (
-            Path(self.project_dir)
-            / f"backend_coupling_map_{self.date_timestamp}_{self.job_0_timestamp}.png"
-        )
+            file_path = (
+                Path(self.project_dir)
+                / f"backend_coupling_map_{self.date_timestamp}_{self.job_0_timestamp}.png"
+            )
 
-        plt.clf()
-        plt.imshow(image_array)
-        plt.title(f'\n{self.date_timestamp}_{self.job_0_timestamp}\n{job.backend().name} coupling map\n', fontsize=18)
-        plt.axis('off')
-        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
-        plt.close()
+            plt.clf()
+            plt.imshow(image_array)
+            plt.title(f'\n{self.date_timestamp}_{self.job_0_timestamp}\n{job.backend().name} coupling map\n', fontsize=18)
+            plt.axis('off')
+            plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
+            plt.close()
+        except:
+            pass
 
     def create_project_json(self):
         
@@ -89,10 +91,10 @@ class StoreJobRecord:
                              job,
                              job_idx):
         
-        self.timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished
-        self.timestamp = self.timestamp_utc.astimezone()
-        self.date_timestamp = self.timestamp.strftime("%Y%m%d")
-        self.job_timestamp = self.timestamp.strftime("%H%M%S")
+        timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished
+        timestamp = timestamp_utc.astimezone()
+        self.date_timestamp = timestamp.strftime("%Y%m%d")
+        self.job_timestamp = timestamp.strftime("%H%M%S")
         self.job_id = job.circuits_run_data[job_idx].results.job_id
 
         self.job_dir = (
@@ -191,3 +193,79 @@ class StoreJobRecord:
         )
         with h5py.File(hdf5_file_dir, 'w') as file:
             file.create_dataset('Experimental Data/Data', data=job_raw_data, compression="gzip")
+
+
+
+class RetrieveProjectRecord:
+
+    def __init__(self,
+                 timestamp,
+                 project_name,
+                 job_id):
+        
+        self.timestamp = timestamp
+        self.project_name = project_name
+        self.job_id = job_id
+
+        date_timestamp = self.timestamp.split('_')[0]
+        job_timestamp = self.timestamp.split('_')[1]
+
+        project_dir = (
+            Path.home() / "Documents" / "QuantumInspireProjects" / date_timestamp
+            / f"{job_timestamp}_{self.project_name}"
+        )
+
+        self.job_dir = None
+        jobs_folders = [p for p in project_dir.iterdir() if p.is_dir()]
+        for dir_entry in jobs_folders:
+            if self.job_id in dir_entry.name:
+                self.job_dir = dir_entry
+        if self.job_dir == None:
+            raise ValueError(f'No files found for timestamp: {timestamp}, project name: {project_name}, and Job ID: {job_id}')
+
+        self.retrieve_qc()
+        self.get_counts()
+        self.get_memory()
+
+    
+    def retrieve_qc(self):
+
+        qasm3_file_path = (
+            Path(self.job_dir)
+            / f"qasm3_program_{self.timestamp}.qasm"
+        )
+        self.qc = qasm3.load(qasm3_file_path)
+
+
+    def get_counts(self):
+
+        json_file_path = (
+            Path(self.job_dir)
+            / f"job_result_{self.timestamp}.json"
+        )
+
+        with open(json_file_path, 'r') as file:
+            json_data = json.load(file)
+
+        counts = json_data['Counts']
+        return counts
+
+    def get_memory(self,
+                   dummy_circuit_nr: int = None):
+
+        hdf5_file_dir = (
+            Path(self.job_dir)
+            / f"raw_data_{self.timestamp}.hdf5"
+        )
+
+        try:
+            with h5py.File(hdf5_file_dir, "r") as f:
+                hdf5_data = f["Experimental Data"]["Data"][()]
+            raw_shots = []
+            for shot_idx in range(len(hdf5_data)):
+                shot_string = ''.join(map(str, hdf5_data[shot_idx][::-1]))
+                raw_shots.append(shot_string)
+            return raw_shots
+
+        except:
+            return None
