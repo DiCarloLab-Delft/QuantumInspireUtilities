@@ -1,9 +1,10 @@
-datetime
-numpy
-scipy
-pandas
+qiskit-quantuminspire
 jupyterlab
 notebook
+matplotlib
+pandas
+pylatexenc
+qiskit-qasm3-import
+datetime
 pytest
-qiskit
-qiskit_quantuminspire
+h5py

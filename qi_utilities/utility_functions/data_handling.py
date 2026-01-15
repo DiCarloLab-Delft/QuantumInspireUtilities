@@ -17,8 +17,8 @@ class StoreProjectRecord:
         self.create_project_json()
         for job_idx in range(len(job.circuits_run_data)):
             self.create_job_directory(job, job_idx)
-            self.store_job_result(job, job_idx)
             self.store_circuit_data(job, job_idx)
+            self.store_job_result(job, job_idx)
             if self.raw_data_memory == True:
                 self.store_raw_data(job, job_idx)
 
@@ -124,6 +124,10 @@ class StoreProjectRecord:
         job_result_dict['Job timestamp'] = f"{self.date_timestamp}_{self.job_timestamp}"
         job_result_dict['Job ID'] = self.job_id
         job_result_dict['Result ID'] = self.result_id
+        job_result_dict['Circuit name'] = self.circuit_name
+        job_result_dict['Number of qubits specified'] = self.num_qubits
+        job_result_dict['Number of classical bits specified'] = self.num_clbits
+        job_result_dict['Circuit depth'] = self.circuit_depth
         job_result_dict['Execution time in seconds'] = self.execution_time_in_seconds
         job_result_dict['Shots requested'] = self.shots_requested
         job_result_dict['Shots done'] = self.shots_done
@@ -162,7 +166,7 @@ class StoreProjectRecord:
             f.write(cqasm_v3_program)
 
         fig1 = self.qc.draw('mpl', scale=1.3)
-        fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nJob ID: {self.job_id}\n',
+        fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
                       x = 0.5, y = 0.99, fontsize=16)
         fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
         circuit_fig_path = (
