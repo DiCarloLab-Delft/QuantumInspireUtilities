@@ -1,6 +1,14 @@
+"""
+Utility classes for storing and retrieving a job (project)
+data and metadata in a structured manner in the local user directory.
+
+Authors: Marios Samiotis
+"""
+
 import numpy as np
 import json
 import h5py
+import warnings
 import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import ImageFilter
@@ -8,26 +16,52 @@ from qiskit import qasm3
 from qiskit_quantuminspire.cqasm import dumps
 
 class StoreProjectRecord:
+    """
+    This class is responsible for storing a job (project) record
+    within the user's local 'Documents' directory.
+
+    'Record' encapsulates both 'data', such as the measurement counts
+    or even raw data shots, but also the 'metadata', such as information
+    regarding the backend, the circuits, etc.
+
+    It works with both the Tuna backends but also the 'QX emulator' backend.
+    """
 
     def __init__(self,
                  job):
-        
+        """
+        Args:
+            job:
+                The user already-submitted job, more correctly referred to as
+                'project'. A project can contain multiple jobs, but for simplification
+                and also legacy reasons, we keep referring to it as the 'job'.
+        """
+
         self.create_project_directory(job)
-        self.obtain_backend_data(job)
-        self.create_project_json()
+        self.obtain_backend_metadata(job)
+        self.store_project_json()
         for job_idx in range(len(job.circuits_run_data)):
             self.create_job_directory(job, job_idx)
-            self.store_circuit_data(job, job_idx)
+            self.store_circuit_metadata(job, job_idx)
             self.store_job_result(job, job_idx)
             if self.raw_data_memory == True:
                 self.store_raw_data(job, job_idx)
 
-        return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}")
+        return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
 
     def create_project_directory(self,
                                  job):
-        
-        timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished
+        """
+        This instance method creates a new project folder within the local user
+        Documents / QuantumInspireProjects directory. If this directory does not
+        already exist, it will be created automatically.
+
+        Args:
+            job:
+                The user already-submitted job (project).
+        """
+
+        timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished, not when created
         timestamp = timestamp_utc.astimezone()
         self.date_timestamp = timestamp.strftime("%Y%m%d")
         self.job_0_timestamp = timestamp.strftime("%H%M%S")
@@ -39,8 +73,16 @@ class StoreProjectRecord:
         )
         self.project_dir.mkdir(parents=True, exist_ok=True)
 
-    def obtain_backend_data(self,
-                            job):
+    def obtain_backend_metadata(self,
+                                job):
+        """
+        This instance method retrieves and then stores all relevant metadata
+        for the backend which was used to run the job(s) on.
+
+        Args:
+            job:
+                The user already-submitted job (project).
+        """
 
         self.backend_name = job.backend().name
         self.backend_nr_qubits = job.backend().num_qubits
@@ -66,13 +108,18 @@ class StoreProjectRecord:
             plt.axis('off')
             plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
             plt.close()
-        except:
-            pass
+        except Exception as e:
+            exception_message = str(e)
+            warnings.warn(f"\nFailed storing backend {self.backend_name} coupling map figure.\nError message: {exception_message}\n",
+                          UserWarning)
 
-    def create_project_json(self):
+    def store_project_json(self):
+        """
+        This instance method stores job (project) related metadata within
+        the project directory in a JSON format.
+        """
         
         general_dict = {}
-
         general_dict['Project name'] = self.project_name
         general_dict['Project timestamp'] = f"{self.date_timestamp}_{self.job_0_timestamp}"
         general_dict['Backend name'] = self.backend_name
@@ -89,9 +136,27 @@ class StoreProjectRecord:
 
     def create_job_directory(self,
                              job,
-                             job_idx):
+                             job_idx: int):
+        """
+        This instance method creates new directories for each job contained
+        within the project.
+
+        Args:
+            job:
+                The user already-submitted job (project).
+
+            job_idx (int):
+                The job index for all jobs contained within the project.
+                While a project may contain a certain number of jobs, e.g. N,
+                it is generally true that the execution of all these jobs
+                in the Quantum Inspire platform is not sequential with respect
+                to the order with which those jobs were created.
+                Therefore, job_idx is being utilized for user clarity when storing
+                the data, so that it follows the sequence with which the jobs were
+                created.
+        """
         
-        timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished
+        timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished, not when created
         timestamp = timestamp_utc.astimezone()
         self.date_timestamp = timestamp.strftime("%Y%m%d")
         self.job_timestamp = timestamp.strftime("%H%M%S")
@@ -107,7 +172,25 @@ class StoreProjectRecord:
 
     def store_job_result(self,
                          job,
-                         job_idx):
+                         job_idx: int):
+        """
+        This instance method stores the job results (with the exception of
+        the raw data), i.e. relevant job metadata and the result 'counts'.
+
+        Args:
+            job:
+                The user already-submitted job (project).
+
+            job_idx (int):
+                The job index for all jobs contained within the project.
+                While a project may contain a certain number of jobs, e.g. N,
+                it is generally true that the execution of all these jobs
+                in the Quantum Inspire platform is not sequential with respect
+                to the order with which those jobs were created.
+                Therefore, job_idx is being utilized for user clarity when storing
+                the data, so that it follows the sequence with which the jobs were
+                created.
+        """
         
         self.result_id = job.circuits_run_data[job_idx].results.id
         self.execution_time_in_seconds = job.circuits_run_data[job_idx].results.execution_time_in_seconds
@@ -140,9 +223,28 @@ class StoreProjectRecord:
         with open(file_path, 'w') as file:
             json.dump(job_result_dict, file, indent=3)
 
-    def store_circuit_data(self,
-                           job,
-                           job_idx):
+    def store_circuit_metadata(self,
+                               job,
+                               job_idx: int):
+        """
+        This instance method stores the job circuit metadata, i.e. bookkeeping
+        records, cQASM_v3 and OpenQASM3 program files, as well as the circuit
+        figure.
+
+        Args:
+            job:
+                The user already-submitted job (project).
+
+            job_idx (int):
+                The job index for all jobs contained within the project.
+                While a project may contain a certain number of jobs, e.g. N,
+                it is generally true that the execution of all these jobs
+                in the Quantum Inspire platform is not sequential with respect
+                to the order with which those jobs were created.
+                Therefore, job_idx is being utilized for user clarity when storing
+                the data, so that it follows the sequence with which the jobs were
+                created.
+        """
 
         self.qc = job.circuits_run_data[job_idx].circuit
         self.circuit_name = self.qc.name
@@ -178,7 +280,43 @@ class StoreProjectRecord:
 
     def store_raw_data(self,
                        job,
-                       job_idx):
+                       job_idx: int):
+        """
+        This instance method stores the job raw data results in an HDF5
+        file format.
+
+        It is important here to mention the conventions: assume that a quantum
+        circuit contains M number of mid-circuit measurements, and that we execute
+        it with N number of shots. The raw data (raw_data) is returned in the form
+        of a list of bitstrings, where each entry of that list represents a circuit shot,
+        and each bitstring contains all measurement outcomes from each mid-circuit
+        measurement block.
+
+        In the Tuna backends, the rightmost bit in the bitstring is the first measurement
+        outcome, while the leftmost bit is the final measurement outcome,
+        e.g. for a bit register of size 3, the bitstring '001' means that the first
+        measurement outcome was '1' and was stored in the bit c0, while the second and
+        third measurement outcomes were '0' and were stored in the bits c1 and c2.
+
+        In the HDF5 file, we reverse the order of the bitstring for clarity. The file
+        contains a 2D array of N rows, representing each shot, and M columns, representing
+        all mid-circuit measurement outcomes. Column 0 in this case represents the first
+        measurement outcome, while column M-1 represents the final measurement outcome. 
+
+        Args:
+            job:
+                The user already-submitted job (project).
+
+            job_idx (int):
+                The job index for all jobs contained within the project.
+                While a project may contain a certain number of jobs, e.g. N,
+                it is generally true that the execution of all these jobs
+                in the Quantum Inspire platform is not sequential with respect
+                to the order with which those jobs were created.
+                Therefore, job_idx is being utilized for user clarity when storing
+                the data, so that it follows the sequence with which the jobs were
+                created.
+        """
 
         raw_data = job.circuits_run_data[job_idx].results.raw_data
         job_raw_data = []
@@ -201,11 +339,37 @@ class StoreProjectRecord:
 
 
 class RetrieveProjectRecord:
+    """
+    This class is responsible for retrieving a single job record
+    within the user's local 'Documents' directory, by providing as inputs
+    the appropriate job timestamp, name, and Job ID. Those three variables
+    uniquely identify a single job in the projects directory.
+
+    It is meant to mimic 'result = job.result()', so that when the user runs
+
+    loaded_result = RetrieveProjectRecord(timestamp, project_name, job_id)
+
+    then they can obtain the measurement counts and raw data as
+
+    loaded_result.get_counts()
+    loaded_result.get_memory()
+    """
 
     def __init__(self,
-                 timestamp,
-                 project_name,
-                 job_id):
+                 timestamp: str,
+                 project_name: str,
+                 job_id: str):
+        """
+        Args:
+            timestamp (str):
+                The job complete timestamp, to be parsed as 'YYYYMMDD_HHMMSS'.
+            
+            project_name (str):
+                The original project name.
+            
+            job_id (str):
+                The Job ID, as this appears also in the Quantum Inspire platform.
+        """
         
         self.timestamp = timestamp
         self.project_name = project_name
@@ -233,6 +397,9 @@ class RetrieveProjectRecord:
 
     
     def retrieve_qc(self):
+        """
+        This instance method retrieves the QuantumCircuit object of the job.
+        """
 
         qasm3_file_path = (
             Path(self.job_dir)
@@ -242,6 +409,9 @@ class RetrieveProjectRecord:
 
 
     def get_counts(self):
+        """
+        This instance method retrieves the job counts in a dictionary format.
+        """
 
         json_file_path = (
             Path(self.job_dir)
@@ -256,6 +426,28 @@ class RetrieveProjectRecord:
 
     def get_memory(self,
                    dummy_circuit_nr: int = None):
+        """
+        This instance method retrieves the job raw data in a list of string
+        bitstrings format.
+
+        For jobs were the variable 'memory' was set to False,
+        e.g. job = backend.run(qc, shots=nr_shots, memory = False)
+        this instance method will return an empty list.
+
+        Args:
+            dummy_circuit_nr (int):
+                This is a dummy variable which does not affect the instance method.
+                It exists so that the instance method mimics result = job.result().get_memory(),
+                which does have the 'circuit_nr' as an input.
+                In result = job.result().get_memory(circuit_nr), since the job object in
+                reality is a project and can in principle contain multiple jobs, the variable
+                circuit_nr is used to identify uniquely a single circuit tied to a single job.
+                
+                Since when instantiating the RetrieveProjectRecord class we have already
+                identified a single job, the circuit_nr would have no meaning.
+                Still, we use here a dummy circuit_nr variable for compatibility purposes with
+                respect to other functions used in other modules.
+        """
 
         hdf5_file_dir = (
             Path(self.job_dir)
@@ -272,4 +464,4 @@ class RetrieveProjectRecord:
             return raw_shots
 
         except:
-            return None
+            return []

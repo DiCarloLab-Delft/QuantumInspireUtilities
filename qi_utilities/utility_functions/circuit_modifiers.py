@@ -69,6 +69,7 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
             A list specifying the bit register for which the measurements outcomes
             will be stored in.
     """
+    
     nr_qubits = len(observable)
     for idx in range(nr_qubits):
         if observable[idx] == 'I':
