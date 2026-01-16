@@ -2,6 +2,8 @@
 NOTE: this file contains legacy code which was used originally with Quantum Inspire (QI) 1.0,
 and has now been translated in order to be used with QI 2.0.
 Apart from the translation to QI 2.0, this code and format are not being currently supported.
+
+Authors: Miguel S. Moreira, Guiseppe Ruggero Di Carlo
 """
 
 import os
@@ -76,7 +78,7 @@ def api_run_and_save(param,
                      histname: str="hist.txt",
                      circuit_name: str="cqasm.txt",
                      shots: int=16384,
-                     backend_name: str='Starmon-7',
+                     backend_name: str='Tuna-9',
                      get_results: bool=True,
                      get_hist_data: bool=False,
                      measurement_list: list=[],
@@ -91,7 +93,7 @@ def api_run_and_save(param,
     Qcircuit:           Qiskit quantum circuit.
     histname:           file name where you want to save the histogram data.                        
     circuit_name:       name of the file in which you want to save the quantum circuit.
-    shots:              desired number of shots. For Starmon-5, the max is 16384.
+    shots:              desired number of shots. For Tuna-9, the max is 16384.
     backend_name:       specify the name of the backend that you want to use.
     get_results:        False: do not return the measurement result
                         True: return the measurement result
