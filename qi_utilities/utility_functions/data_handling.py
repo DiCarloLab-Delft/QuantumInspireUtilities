@@ -14,6 +14,7 @@ from pathlib import Path
 from PIL import ImageFilter
 from qiskit import qasm3
 from qiskit_quantuminspire.cqasm import dumps
+from qiskit_quantuminspire.qi_jobs import QIJob
 
 class StoreProjectRecord:
     """
@@ -28,10 +29,10 @@ class StoreProjectRecord:
     """
 
     def __init__(self,
-                 job):
+                 job: QIJob):
         """
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job, more correctly referred to as
                 'project'. A project can contain multiple jobs, but for simplification
                 and also legacy reasons, we keep referring to it as the 'job'.
@@ -50,14 +51,14 @@ class StoreProjectRecord:
         return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
 
     def create_project_directory(self,
-                                 job):
+                                 job: QIJob):
         """
         This instance method creates a new project folder within the local user
         Documents / QuantumInspireProjects directory. If this directory does not
         already exist, it will be created automatically.
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
         """
 
@@ -74,13 +75,13 @@ class StoreProjectRecord:
         self.project_dir.mkdir(parents=True, exist_ok=True)
 
     def obtain_backend_metadata(self,
-                                job):
+                                job: QIJob):
         """
         This instance method retrieves and then stores all relevant metadata
         for the backend which was used to run the job(s) on.
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
         """
 
@@ -135,14 +136,14 @@ class StoreProjectRecord:
             json.dump(general_dict, file, indent=3)
 
     def create_job_directory(self,
-                             job,
+                             job: QIJob,
                              job_idx: int):
         """
         This instance method creates new directories for each job contained
         within the project.
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
 
             job_idx (int):
@@ -171,14 +172,14 @@ class StoreProjectRecord:
         self.job_dir.mkdir(parents=True, exist_ok=True)
 
     def store_job_result(self,
-                         job,
+                         job: QIJob,
                          job_idx: int):
         """
         This instance method stores the job results (with the exception of
         the raw data), i.e. relevant job metadata and the result 'counts'.
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
 
             job_idx (int):
@@ -224,7 +225,7 @@ class StoreProjectRecord:
             json.dump(job_result_dict, file, indent=3)
 
     def store_circuit_metadata(self,
-                               job,
+                               job: QIJob,
                                job_idx: int):
         """
         This instance method stores the job circuit metadata, i.e. bookkeeping
@@ -232,7 +233,7 @@ class StoreProjectRecord:
         figure.
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
 
             job_idx (int):
@@ -279,7 +280,7 @@ class StoreProjectRecord:
 
 
     def store_raw_data(self,
-                       job,
+                       job: QIJob,
                        job_idx: int):
         """
         This instance method stores the job raw data results in an HDF5
@@ -304,7 +305,7 @@ class StoreProjectRecord:
         measurement outcome, while column M-1 represents the final measurement outcome. 
 
         Args:
-            job:
+            job (QIJob):
                 The user already-submitted job (project).
 
             job_idx (int):
