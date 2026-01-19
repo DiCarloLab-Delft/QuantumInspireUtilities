@@ -278,7 +278,6 @@ class StoreProjectRecord:
         )
         fig1.savefig(circuit_fig_path)
 
-
     def store_raw_data(self,
                        job: QIJob,
                        job_idx: int):
@@ -337,8 +336,6 @@ class StoreProjectRecord:
         with h5py.File(hdf5_file_dir, 'w') as file:
             file.create_dataset('Experimental Data/Data', data=job_raw_data, compression="gzip")
 
-
-
 class RetrieveProjectRecord:
     """
     This class is responsible for retrieving a single job record
@@ -396,7 +393,6 @@ class RetrieveProjectRecord:
         self.get_counts()
         self.get_memory()
 
-    
     def retrieve_qc(self):
         """
         This instance method retrieves the QuantumCircuit object of the job.
@@ -407,7 +403,6 @@ class RetrieveProjectRecord:
             / f"qasm3_program_{self.timestamp}.qasm"
         )
         self.qc = qasm3.load(qasm3_file_path)
-
 
     def get_counts(self):
         """

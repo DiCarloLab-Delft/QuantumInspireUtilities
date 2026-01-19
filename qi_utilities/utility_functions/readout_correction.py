@@ -1,18 +1,42 @@
+"""
+Utility functions for processing raw measurement data for executed
+quantum circuits which contained measurements for extracting the readout
+assignment matrix, and for applying the readout assignment matrix to
+raw data shots in order to mitigate readout errors.
+
+Authors: Marios Samiotis
+"""
+
 import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.colors import LinearSegmentedColormap, Normalize
-from qi_utilities.utility_functions.midcircuit_msmt import obtain_binary_list, get_multi_qubit_counts
+from qiskit.result.result import Result
+from qi_utilities.utility_functions.raw_data_processing import obtain_binary_list, get_multi_counts
 
-
-
-def split_raw_shots(result,
+def split_raw_shots(result: Result,
                     qubit_list: list,
                     circuit_nr: int = None):
     """
-    Splits the raw shots into two groups for a circuit containing readout mitigation circuits
-    at the end of it.
+    This function splits the raw data shots of the measurement result
+    into two groups, for a circuit containing readout mitigation circuits
+    at its end.
+
+    Args:
+        result (Result):
+            The result of a job (project), as returned from
+            result = job.result()
+
+        qubit_list (list):
+            An ordered list containing the integer indices of the qubits
+            used in the original quantum circuit.
+            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+
+        circuit_nr (int):
+            The circuit number within a job, since a job can contain
+            multiple quantum circuits.
+            Defaults to None for a job with a single quantum circuit.
     """
 
     nr_qubits = len(qubit_list)
@@ -26,19 +50,37 @@ def split_raw_shots(result,
         experiment_shots.append(raw_shots[raw_shots_entry][2**(nr_qubits+1)::])
     return experiment_shots, ro_mitigation_shots
 
+def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
+                                 ro_assignment_matrix: np.ndarray,
+                                 qubit_list: list):
+    """
+    This function takes as input the raw data probabilities and applies the
+    readout assignment matrix in order to mitigate readout errors.
 
-def ro_corrected_multi_qubit_prob(experiment_probs,
-                                  ro_assignment_matrix,
-                                  qubit_list: list):
+    Args:
+        raw_data_probs (list):
+            A list of dictionaries each containing the measurement probabilities
+            of a certain measurement block.
+            e.g. raw_data_probs = [{'00': 0.25, '01': 0.25, '10': 0.25, '11': 0.25},
+                                    ...]
+
+        ro_assignment_matrix (np.ndarray):
+            The readout assignment matrix.
+
+        qubit_list (list):
+            An ordered list containing the integer indices of the qubits
+            used in the original quantum circuit.
+            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+    """
 
     nr_qubits = len(qubit_list)
     binary_list = obtain_binary_list(nr_qubits)
     
-    experiment_probs_ro_corrected = []
+    raw_data_probs_ro_corrected = []
 
-    for entry_idx in range(len(experiment_probs)):
+    for entry_idx in range(len(raw_data_probs)):
 
-        probs = np.array(list(experiment_probs[entry_idx].values()))
+        probs = np.array(list(raw_data_probs[entry_idx].values()))
 
         def objective(x):
             return np.linalg.norm(ro_assignment_matrix @ x - probs) ** 2
@@ -59,20 +101,42 @@ def ro_corrected_multi_qubit_prob(experiment_probs,
         for idx in range(len(result.x)):
             probs_ro_corrected_dict[binary_list[idx]] = result.x[idx]
 
-        experiment_probs_ro_corrected.append(probs_ro_corrected_dict)
-    return experiment_probs_ro_corrected
+        raw_data_probs_ro_corrected.append(probs_ro_corrected_dict)
+    return raw_data_probs_ro_corrected
 
 
-def extract_ro_assignment_matrix(ro_mitigation_shots,
+def extract_ro_assignment_matrix(ro_mitigation_shots: list,
                                  qubit_list: list):
+    """
+    This function uses as input the raw data shots from the readout
+    mitigation circuits that are usually appended at the end of a
+    quantum circuit, and extracts the readout assignment matrix.
+
+    Args:
+        ro_mitigation_shots (list):
+            The raw data shots returned from the readout mitigation
+            quantum circuits which contain multiple mid-circuit
+            measurement blocks.
+
+            For a quantum circuit containing M number of mid-circuit measurements,
+            and executing it for a number of N shots, len(raw_data_shots) = N,
+            while each entry of the list contains a bitstring of size M.
+
+            The convention followed in each bitstring for a bit register of size K
+            is 'cK-1,cK-2,...,c2,c1,c0', meaning that the rightmost bit corresponds
+            to the very first bit in the bit register.
+
+        qubit_list (list):
+            An ordered list containing the integer indices of the qubits
+            used in the original quantum circuit.
+            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+    """
 
     nr_qubits = len(qubit_list)
     prepared_states = obtain_binary_list(nr_qubits)
     
-    ro_counts_per_prepared_states = get_multi_qubit_counts(ro_mitigation_shots, nr_qubits)
-
+    ro_counts_per_prepared_states = get_multi_counts(ro_mitigation_shots, nr_qubits)
     assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float64)
-
     for prepared_state_idx in range(len(prepared_states)):
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                  for state in prepared_states]) / len(ro_mitigation_shots)
@@ -80,11 +144,23 @@ def extract_ro_assignment_matrix(ro_mitigation_shots,
     return assignment_probability_matrix
 
 
-def plot_ro_assignment_matrix(ro_assignment_matrix,
+def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
                               qubit_list: list):
+    """
+    This function creates and prints a figure of the readout assignment
+    matrix.
+
+    Args:
+        ro_assignment_matrix (np.ndarray):
+            The readout assignment matrix.
+
+        qubit_list (list):
+            An ordered list containing the integer indices of the qubits
+            used in the original quantum circuit.
+            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+    """
 
     def red_white_green_cmap():
-        # Number of samples for smoothness
         n = 256
 
         # Fractions of the full range
@@ -96,7 +172,7 @@ def plot_ro_assignment_matrix(ro_assignment_matrix,
         greens_n = n - reds_n - middle_n
 
         reds = plt.cm.Reds(np.linspace(0.0, 1.0, reds_n))
-        middle = np.ones((middle_n, 4))  # white
+        middle = np.ones((middle_n, 4))  # white color
         greens = plt.cm.Greens(np.linspace(0.0, 1.0, greens_n))
 
         colors = np.vstack((reds, middle, greens))

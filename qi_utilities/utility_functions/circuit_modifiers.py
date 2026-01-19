@@ -89,7 +89,6 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
 
     return qc
 
-
 def apply_readout_circuit(qc: QuantumCircuit,
                           qubit_list: list):
     """
