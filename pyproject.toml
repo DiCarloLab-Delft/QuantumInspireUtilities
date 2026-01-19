@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qi_utilities"
+version = "0.2.1"
+description = "Package library with utility functions and demonstration notebooks especially suited for the superconducting hardware backends of the cloud quantum computing platform Quantum Inspire."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+
+authors = [
+    { name = "DiCarlo Lab at QuTech", email = "secr-qutech@tudelft.nl" }
+]
+
+maintainers = [
+    { name = "Marios Samiotis", email = "m.samiotis@tudelft.nl" }
+]
+
+keywords = [
+    "quantuminspire",
+    "qiskit",
+    "quantum computing",
+    "superconducting"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "qiskit-quantuminspire",
+    "matplotlib",
+    "pandas",
+    "pylatexenc",
+    "qiskit-qasm3-import",
+    "h5py",
+]
+
+[project.urls]
+Homepage = "https://github.com/DiCarloLab-Delft/QuantumInspireUtilities"
+
+[tool.setuptools.packages.find]
+where = ["."]

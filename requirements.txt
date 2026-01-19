@@ -1,9 +1,0 @@
-datetime
-numpy
-scipy
-pandas
-jupyterlab
-notebook
-pytest
-qiskit
-qiskit_quantuminspire

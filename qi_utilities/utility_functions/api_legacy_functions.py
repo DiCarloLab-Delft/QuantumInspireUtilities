@@ -13,9 +13,10 @@ from qiskit_quantuminspire.qi_provider import QIProvider
 def prepare_file(basename: str="",
                  suffix: str="",
                  doraw: int=0):
-    '''
+    """
     Creates the file name according to the basename and suffix that you provide.
-    '''
+    """
+
     histname="hist_"+basename
     circuitname="circuit_"+basename
     rawname="Raw_"+basename
@@ -35,11 +36,11 @@ def prepare_file(basename: str="",
     else:
         return histname, circuitname, rawname
 
-
 def GetTimeStamp():
-    '''
+    """
     Returns the timestamp of the current date and time
-    '''
+    """
+
     current_date = datetime.datetime.now()
     thisyear=str(current_date.year)
     thismonth="0"+str(current_date.month)
@@ -51,9 +52,10 @@ def GetTimeStamp():
     return timestamp
 
 def create_new_data_folder(datadir: str):
-    '''
+    """
     Crates the folder with the current date in the specified path.
-    '''
+    """
+
     data_folder_path = datadir + "/Data"
     try:
         os.makedirs(data_folder_path, exist_ok=False)
@@ -76,14 +78,14 @@ def api_run_and_save(param,
                      histname: str="hist.txt",
                      circuit_name: str="cqasm.txt",
                      shots: int=16384,
-                     backend_name: str='Starmon-7',
+                     backend_name: str='Tuna-9',
                      get_results: bool=True,
                      get_hist_data: bool=False,
                      measurement_list: list=[],
                      get_raw_data: bool=False,
                      rawdata_filename: str="rawdata",
                      timeout: int = 1200):
-    '''
+    """
     Runs QI with qiskit program and returns histogram and the raw data
     A copy of the cqasm program is saved to file circuit_name.
 
@@ -91,7 +93,7 @@ def api_run_and_save(param,
     Qcircuit:           Qiskit quantum circuit.
     histname:           file name where you want to save the histogram data.                        
     circuit_name:       name of the file in which you want to save the quantum circuit.
-    shots:              desired number of shots. For Starmon-5, the max is 16384.
+    shots:              desired number of shots. For Tuna-9, the max is 16384.
     backend_name:       specify the name of the backend that you want to use.
     get_results:        False: do not return the measurement result
                         True: return the measurement result
@@ -103,7 +105,7 @@ def api_run_and_save(param,
     get_raw_data:       False: do not return the raw data
                         True: return the raw data
     rawdata_filename:   name of the raw data file you want to save
-    '''
+    """
     
     # Set the backend
     provider = QIProvider()
