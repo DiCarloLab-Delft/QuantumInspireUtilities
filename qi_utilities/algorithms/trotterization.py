@@ -28,7 +28,7 @@ def apply_trotter_block(qc: QuantumCircuit,
             It should be given in units of [Hz].
 
             In general, a Hamiltonian operator is written as
-            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            H = sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
             and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
 
             For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
@@ -99,7 +99,7 @@ def construct_trotterization_circuit(initial_state: str,
             It should be given in units of [Hz].
 
             In general, a Hamiltonian operator is written as
-            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            H = sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
             and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
 
             For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
@@ -126,13 +126,9 @@ def construct_trotterization_circuit(initial_state: str,
 
     nr_qubits = len(initial_state)
     if midcircuit_measurement == True:
-        qc = QuantumCircuit(nr_qubits,
-                            nr_qubits*len(evolution_times),
-                            name=f"Trotterization_{measured_observable}")
+        qc = QuantumCircuit(nr_qubits, nr_qubits*len(evolution_times))
     else:
-        qc = QuantumCircuit(nr_qubits,
-                            nr_qubits,
-                            name=f"Trotterization_{measured_observable}")
+        qc = QuantumCircuit(nr_qubits, nr_qubits)
     for idx in range(nr_qubits):
         qc.reset(idx)
     qc.barrier()

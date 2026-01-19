@@ -34,7 +34,7 @@ def evolve_quantum_state(quantum_state: QuantumCircuit,
             It should be given in units of [Hz].
 
             In general, a Hamiltonian operator is written as
-            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            H = sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
             and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
 
             For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
@@ -83,7 +83,7 @@ def simulate_time_evolution(initial_state: QuantumCircuit,
             It should be given in units of [Hz].
 
             In general, a Hamiltonian operator is written as
-            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            H = sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
             and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
 
             For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
