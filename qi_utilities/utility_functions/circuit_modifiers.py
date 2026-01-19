@@ -60,8 +60,8 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
         observable (str):
             The observable to be measured, expressed strictly in the Pauli basis,
             for which the pre-measurement rotations are being applied for.
-            For a Pauli Pi, acting on a qubit qi, the order in the string is
-            'Pn-1,Pn-2,...,P2,P1,P0'.
+            For an n-qubit Pauli string P, where Pauli Pi acts on qubit qi, the order
+            in the string is 'Pn-1,Pn-2,...,P2,P1,P0'.
             e.g. for the two-qubit observable string 'YX', qubit q0 is measured
             in the X basis, while qubit q1 is measured in the Y basis.
 

@@ -30,7 +30,17 @@ def evolve_quantum_state(quantum_state: QuantumCircuit,
 
         hamiltonian (SparsePauliOp):
             The Hamiltonian operator describing the dynamics of a given
-            quantum system. It should be given in units of [Hz].
+            quantum system, written in the Pauli basis.
+            It should be given in units of [Hz].
+
+            In general, a Hamiltonian operator is written as
+            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
+
+            For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
+            on qubit qi, the ordering of the string is 'Pn-1,Pn-2,...,P2,P1,P0'.
+            e.g. for the two-qubit Pauli string 'YX', operator X corresponds
+            to qubit q0, while operator Y corresponds to qubit q1.
 
         time_step (float):
             The time step in which we evolve dynamically forward in time
@@ -69,7 +79,17 @@ def simulate_time_evolution(initial_state: QuantumCircuit,
 
         hamiltonian (SparsePauliOp):
             The Hamiltonian operator describing the dynamics of a given
-            quantum system. It should be given in units of [Hz].
+            quantum system, written in the Pauli basis.
+            It should be given in units of [Hz].
+
+            In general, a Hamiltonian operator is written as
+            H = \sum_{j} a_j * P_j, where a_j are complex coefficients in units of [Hz],
+            and P_j are n-qubit Pauli operators (else referred to as 'Pauli strings').
+
+            For an n-qubit Pauli operator P in the Hamiltonian, with Pauli Pi acting
+            on qubit qi, the ordering of the string is 'Pn-1,Pn-2,...,P2,P1,P0'.
+            e.g. for the two-qubit Pauli string 'YX', operator X corresponds
+            to qubit q0, while operator Y corresponds to qubit q1.
 
         evolution_times (np.ndarray):
             A numpy array containing the discrete time steps for which the simulation
@@ -78,6 +98,11 @@ def simulate_time_evolution(initial_state: QuantumCircuit,
         observables (list):
             A list containing the observables for which the simulation calculates
             the expectation values of, for each time step within the 'evolution_times'.
+
+            For an n-qubit Pauli string P, where Pauli Pi acts on qubit qi, the order
+            in the string is 'Pn-1,Pn-2,...,P2,P1,P0'.
+            e.g. for the two-qubit observable string 'IZ', operator Z corresponds to
+            qubit q0 while operator I corresponds to qubit q1.
     """
     dt = evolution_times[1] - evolution_times[0] #use this for the time_interval in noisy evolution
     observables_dict = {}
