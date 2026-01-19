@@ -1,6 +1,6 @@
 """
 Utility functions for constructing and modifying specific parts
-of an existing Qiskit QuantumCircuit ('qc').
+of an existing Qiskit QuantumCircuit object ('qc').
 
 This module contains helper routines for state initialization,
 measurement basis rotation, and readout circuit composition.
@@ -95,8 +95,8 @@ def apply_readout_circuit(qc: QuantumCircuit,
     This function appends a QuantumCircuit object with a quantum circuit
     containing mid-circuit measurements which are used in post-processing
     for constructing the readout assignment matrix. The matrix is later on
-    applied on the raw data measurement outcomes in order to mitigate readout
-    error.
+    applied on the raw measurement outcomes in order to mitigate readout
+    errors.
 
     Args:
         qc (QuantumCircuit):
@@ -106,7 +106,7 @@ def apply_readout_circuit(qc: QuantumCircuit,
             An ordered list specifying the qubits on which we apply the
             readout circuit on.
             e.g. qubit_list = [0, 2] will apply the readout circuit on
-            qubit q0 and q2.
+            qubits q0 and q2.
     """
 
     nr_qubits = len(qubit_list)

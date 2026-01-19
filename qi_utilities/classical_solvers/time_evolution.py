@@ -104,6 +104,10 @@ def simulate_time_evolution(initial_state: QuantumCircuit,
             e.g. for the two-qubit observable string 'IZ', operator Z corresponds to
             qubit q0 while operator I corresponds to qubit q1.
     """
+
+    if type(initial_state) is not QuantumCircuit:
+        raise TypeError(f"Object {initial_state} must be a QuantumCircuit.")
+    
     dt = evolution_times[1] - evolution_times[0] #use this for the time_interval in noisy evolution
     observables_dict = {}
     for observable in observables:

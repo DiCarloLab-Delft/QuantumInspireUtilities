@@ -1,5 +1,5 @@
 """
-Utility functions for creating a Trotterization quantum circuit.
+Utility functions for synthesizing a Trotterization quantum circuit.
 
 Authors: Marios Samiotis
 """
@@ -17,6 +17,7 @@ def apply_trotter_block(qc: QuantumCircuit,
     """
     This function applies a Trotter block on a given quantum circuit
     'qc'.
+    We follow the common convention hbar=1.
 
     Args:
         qc (QuantumCircuit):
@@ -75,6 +76,7 @@ def construct_trotterization_circuit(initial_state: str,
     """
     This function uses the 'trotter_block' function contained in this module
     to create the Trotterization quantum circuit from an initial state.
+    We follow the common convention hbar=1.
 
     Args:
         initial_state (str):

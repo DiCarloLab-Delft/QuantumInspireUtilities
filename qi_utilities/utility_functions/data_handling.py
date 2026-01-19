@@ -23,7 +23,7 @@ class StoreProjectRecord:
 
     'Record' encapsulates both 'data', such as the measurement counts
     or even raw data shots, but also the 'metadata', such as information
-    regarding the backend, the circuits, etc.
+    regarding the backend, the quantum circuits executed, etc.
 
     It works with both the Tuna backends but also the 'QX emulator' backend.
     """
@@ -33,9 +33,9 @@ class StoreProjectRecord:
         """
         Args:
             job (QIJob):
-                The user already-submitted job, more correctly referred to as
-                'project'. A project can contain multiple jobs, but for simplification
-                and also legacy reasons, we keep referring to it as the 'job'.
+                The user already-submitted job object, more correctly referred to as
+                'project'. A project can contain multiple jobs, but for simplification,
+                and also for legacy reasons, we keep referring to it as the 'job'.
         """
 
         self.create_project_directory(job)
@@ -59,7 +59,7 @@ class StoreProjectRecord:
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
         """
 
         timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished, not when created
@@ -82,7 +82,7 @@ class StoreProjectRecord:
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
         """
 
         self.backend_name = job.backend().name
@@ -144,7 +144,7 @@ class StoreProjectRecord:
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
 
             job_idx (int):
                 The job index for all jobs contained within the project.
@@ -152,7 +152,7 @@ class StoreProjectRecord:
                 it is generally true that the execution of all these jobs
                 in the Quantum Inspire platform is not sequential with respect
                 to the order with which those jobs were created.
-                Therefore, job_idx is being utilized for user clarity when storing
+                Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
         """
@@ -180,7 +180,7 @@ class StoreProjectRecord:
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
 
             job_idx (int):
                 The job index for all jobs contained within the project.
@@ -188,7 +188,7 @@ class StoreProjectRecord:
                 it is generally true that the execution of all these jobs
                 in the Quantum Inspire platform is not sequential with respect
                 to the order with which those jobs were created.
-                Therefore, job_idx is being utilized for user clarity when storing
+                Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
         """
@@ -234,7 +234,7 @@ class StoreProjectRecord:
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
 
             job_idx (int):
                 The job index for all jobs contained within the project.
@@ -242,7 +242,7 @@ class StoreProjectRecord:
                 it is generally true that the execution of all these jobs
                 in the Quantum Inspire platform is not sequential with respect
                 to the order with which those jobs were created.
-                Therefore, job_idx is being utilized for user clarity when storing
+                Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
         """
@@ -301,11 +301,12 @@ class StoreProjectRecord:
         In the HDF5 file, we reverse the order of the bitstring for clarity. The file
         contains a 2D array of N rows, representing each shot, and M columns, representing
         all mid-circuit measurement outcomes. Column 0 in this case represents the first
-        measurement outcome, while column M-1 represents the final measurement outcome. 
+        measurement outcome, while column M-1 represents the final measurement outcome
+        for a particular measurement shot. 
 
         Args:
             job (QIJob):
-                The user already-submitted job (project).
+                The user already-submitted job (project) object.
 
             job_idx (int):
                 The job index for all jobs contained within the project.
@@ -313,7 +314,7 @@ class StoreProjectRecord:
                 it is generally true that the execution of all these jobs
                 in the Quantum Inspire platform is not sequential with respect
                 to the order with which those jobs were created.
-                Therefore, job_idx is being utilized for user clarity when storing
+                Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
         """
