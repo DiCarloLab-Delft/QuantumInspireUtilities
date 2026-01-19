@@ -120,6 +120,11 @@ def observable_expectation_values_Z_basis(probabilities: list[dict],
         observable (str):
             The observable for which this function calculates the expectation values of.
             It must be expressed in the Z basis, containing no Paulis X or Y.
+
+            For a Pauli Pi, acting on a qubit qi, the order in the string is
+            'Pn-1,Pn-2,...,P2,P1,P0'.
+            e.g. for the two-qubit observable string 'YX', qubit q0 is measured
+            in the X basis, while qubit q1 is measured in the Y basis.
     """
 
     if 'X' in observable or 'Y' in observable:
