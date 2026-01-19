@@ -110,7 +110,7 @@ def apply_readout_circuit(qc: QuantumCircuit,
     """
 
     nr_qubits = len(qubit_list)
-    readout_circuit = QuantumCircuit(qc.num_qubits, qc.num_clbits + 2**(nr_qubits+1), name=qc.name)
+    readout_circuit = QuantumCircuit(qc.num_qubits, qc.num_clbits + nr_qubits * 2**nr_qubits, name=qc.name)
 
     binary_list = []
     for binary_str_idx in range(2**nr_qubits):
@@ -134,6 +134,6 @@ def apply_readout_circuit(qc: QuantumCircuit,
         readout_circuit.barrier()
 
     qc.barrier()
-    additional_bits = ClassicalRegister(2**(nr_qubits+1))
+    additional_bits = ClassicalRegister(nr_qubits * 2**nr_qubits)
     qc.add_bits(additional_bits)
     return readout_circuit.compose(qc, front=True)

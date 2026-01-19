@@ -31,7 +31,7 @@ def split_raw_shots(result: Result,
         qubit_list (list):
             An ordered list containing the integer indices of the qubits
             used in the original quantum circuit.
-            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+            e.g. for qubits q0 and q2, qubit_list = [0, 2].
 
         circuit_nr (int):
             The circuit number within a job, since a job can contain
@@ -46,8 +46,8 @@ def split_raw_shots(result: Result,
     ro_mitigation_shots = []
 
     for raw_shots_entry in range(len(raw_shots)):
-        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:2**(nr_qubits+1)])
-        experiment_shots.append(raw_shots[raw_shots_entry][2**(nr_qubits+1)::])
+        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:nr_qubits*2**nr_qubits])
+        experiment_shots.append(raw_shots[raw_shots_entry][nr_qubits*2**nr_qubits::])
     return experiment_shots, ro_mitigation_shots
 
 def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
@@ -70,7 +70,7 @@ def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
         qubit_list (list):
             An ordered list containing the integer indices of the qubits
             used in the original quantum circuit.
-            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+            e.g. for qubits q0 and q2, qubit_list = [0, 2].
     """
 
     nr_qubits = len(qubit_list)
@@ -129,7 +129,7 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
         qubit_list (list):
             An ordered list containing the integer indices of the qubits
             used in the original quantum circuit.
-            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+            e.g. for qubits q0 and q2, qubit_list = [0, 2].
     """
 
     nr_qubits = len(qubit_list)
@@ -157,7 +157,7 @@ def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
         qubit_list (list):
             An ordered list containing the integer indices of the qubits
             used in the original quantum circuit.
-            e.g. for qubits Q0 and Q2, qubit_list = [0, 2].
+            e.g. for qubits q0 and q2, qubit_list = [0, 2].
     """
 
     def red_white_green_cmap():
