@@ -8,7 +8,7 @@ version = "0.2.1"
 description = "Package library with utility functions and demonstration notebooks especially suited for the superconducting hardware backends of the cloud quantum computing platform Quantum Inspire."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
+license = "MIT"
 
 authors = [
     { name = "DiCarlo Lab at QuTech", email = "secr-qutech@tudelft.nl" }
