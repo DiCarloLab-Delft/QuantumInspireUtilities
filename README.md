@@ -40,15 +40,13 @@ Installing quantuminspire within the conda environment restricts the command 'qi
 
 Note: in order to run the method backend.coupling_map.draw(), you will need to [install Graphviz](https://graphviz.org/download/#executable-packages) in your computer. Make sure during installation to add Graphviz to the system PATH, so that your Python environment can recognize it.
 
-## 2. Cloning and installing from source
-In order to install this repository from source, you will need a GitHub account to be able to pull the project.
+## 2. Using the notebook guides (requires cloning the repository)
+
+In order to use the Jupyter notebook guides which include from simple example code up to advanced demonstrations, you will need to clone this repository. First, you will need a GitHub account to be able to pull the project.
+
 For new users, we recommend downloading [GitHub Desktop](https://desktop.github.com/download/), and then cloning the repository by using the link https://github.com/DiCarloLab-Delft/QuantumInspireUtilities.git.
 
-After creating a working Python environment (see instructions above), open Anaconda Prompt to activate the environment, navigate to the repository directory, and use the following pip command to [install](https://docs.python.org/3/installing/index.html),
-
-python -m pip install -e .
-
-The '-e' flag makes the package configurable.
+After creating a working Python environment (see instructions above) and having cloned the repository, you should be able to use the notebooks.
 
 In order to create your first quantum circuit using the Quantum Inspire SDK, visit https://qutech-delft.github.io/qiskit-quantuminspire/getting_started/submitting.html.
 
