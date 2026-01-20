@@ -1,6 +1,13 @@
 # QuantumInspireUtilities
 This repository contains utility functions and demonstration notebooks that supplement the [Quantum Inspire 2.0](https://www.quantum-inspire.com/) Python SDK, tailored for the superconducting backends of the platform, hosted in the [DiCarlo lab](https://qutech.nl/lab/dicarlo-lab-welcome/) in QuTech.
 
+It is primarily intended for researchers, students, and developers who use Quantum Inspire’s superconducting backends and want reusable utilities and worked examples beyond the core SDK.
+
+Useful links relating to our superconducting backends:
+1. [Tuna Backends Operational Specifics](https://www.quantum-inspire.com/kbase/tuna-operational-specifics/)
+2. [Backend Performance Dashboards](https://monitoring.qutech.support/public-dashboards/c494a21fb6b7405f850ab8f340f798ef?orgId=1&refresh=10s) [live updates]
+3. [Join our Slack community!](https://join.slack.com/t/qisuperconducting/shared_invite/zt-35o7zitdh-_9QPmB53hhLy12Eat5gwWA)
+
 ## 1. Installation instructions
 
 ### 1.1. Beginner-friendly installation
@@ -48,4 +55,4 @@ In order to create your first quantum circuit using the Quantum Inspire SDK, vis
 ## 3. TODOs
 [2026-01-20] Current list of targeted upcoming new features:
 
-* Create a notebook guide on variational quantum algorithms.
+* Create utility functions and a demonstration notebook guide on variational quantum algorithms.
