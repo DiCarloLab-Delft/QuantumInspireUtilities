@@ -117,7 +117,7 @@ def measure_ro_assignment_matrix(backend,
     qc = apply_readout_circuit(qc, [idx for idx in range(nr_qubits)])
     qc_transpiled = transpile(qc, backend, initial_layout=qubit_list)
     job = backend.run(qc_transpiled, shots=nr_shots, memory = True)
-    result = job.result(timeout = 600)
+    result = job.result(timeout = 6 * 600)
     StoreProjectRecord(job, silent=True)
 
     raw_data_shots, ro_mitigation_shots = split_raw_shots(result, qubit_list)

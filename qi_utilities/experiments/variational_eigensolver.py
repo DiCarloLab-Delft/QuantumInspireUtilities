@@ -63,8 +63,8 @@ class ExecuteVQE:
         self.fig, self.ax = plt.subplots()
         self.ax.set_xlabel("Iteration, k")
         self.ax.set_ylabel(f"Energy [{self.hamiltonian_units}]")
-        self.ax.set_title("VQE Energy Convergence")
-        self.ax.set_xlim(-0.1, 2*self.maxiter+1)
+        self.ax.set_title(f"{self.date_timestamp}_{self.project_timestamp}\nVQE Energy Convergence")
+        self.ax.set_xlim(-0.1, 2*self.maxiter+1.1)
         self.ax.set_ylim(1.1*lower_bound, 0.5*np.abs(lower_bound))
         self.line, = self.ax.plot([], [], 'b-o', alpha=0.7,
                                   color='C0', linewidth=2, label='Data points')
@@ -206,7 +206,7 @@ class ExecuteVQE:
                                 basis_gates=self.basis_gates)
         
         job = self.backend.run(qc_instance_transpiled, shots=self.nr_shots, memory=True)
-        result = job.result(timeout = 600)
+        result = job.result(timeout = 6 * 600)
         job_record = StoreProjectRecord(job, silent=True)
         output_energy = self.calculate_energy(result)
 
@@ -241,5 +241,12 @@ class ExecuteVQE:
         
         self.termination_status = True
         self.store_project_json()
+
+        vqe_fig_path = (
+            Path(self.project_dir)
+            / f"vqe_run_{self.date_timestamp}_{self.project_timestamp}.png"
+        )
+        self.fig.savefig(vqe_fig_path, dpi=300)
+
         import matplotlib
         matplotlib.use(self.init_mpl_backend, force=True)
