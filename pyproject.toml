@@ -43,6 +43,8 @@ dependencies = [
     "pylatexenc",
     "qiskit-qasm3-import",
     "h5py",
+    "qiskit-algorithms",
+    "pyqt5"
 ]
 
 [project.urls]

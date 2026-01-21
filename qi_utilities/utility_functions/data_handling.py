@@ -98,19 +98,13 @@ class StoreProjectRecord:
             figure = job.backend().coupling_map.draw()
             image = figure.resize((800, 800))
             sharpened = image.filter(ImageFilter.SHARPEN)
-            image_array = np.array(sharpened)
 
             file_path = (
                 Path(self.project_dir)
                 / f"backend_coupling_map_{self.date_timestamp}_{self.job_0_timestamp}.png"
             )
+            sharpened.save(file_path)
 
-            plt.clf()
-            plt.imshow(image_array)
-            plt.title(f'\n{self.date_timestamp}_{self.job_0_timestamp}\n{job.backend().name} coupling map\n', fontsize=18)
-            plt.axis('off')
-            plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
-            plt.close()
         except Exception as e:
             exception_message = str(e)
             warnings.warn(f"\nFailed storing backend {self.backend_name} coupling map figure.\nError message: {exception_message}\n",
@@ -279,6 +273,7 @@ class StoreProjectRecord:
             / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
         )
         fig1.savefig(circuit_fig_path)
+        plt.close(fig1)
 
     def store_raw_data(self,
                        job: QIJob,
