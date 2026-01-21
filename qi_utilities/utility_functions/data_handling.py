@@ -29,7 +29,8 @@ class StoreProjectRecord:
     """
 
     def __init__(self,
-                 job: QIJob):
+                 job: QIJob,
+                 silent: bool = False):
         """
         Args:
             job (QIJob):
@@ -48,7 +49,8 @@ class StoreProjectRecord:
             if self.raw_data_memory == True:
                 self.store_raw_data(job, job_idx)
 
-        return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
+        if silent == False:
+            print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
 
     def create_project_directory(self,
                                  job: QIJob):

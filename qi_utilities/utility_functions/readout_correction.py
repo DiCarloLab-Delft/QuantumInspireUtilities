@@ -12,8 +12,11 @@ from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.colors import LinearSegmentedColormap, Normalize
+from qiskit import QuantumCircuit, transpile
 from qiskit.result.result import Result
+from qi_utilities.utility_functions.circuit_modifiers import apply_readout_circuit
 from qi_utilities.utility_functions.raw_data_processing import obtain_binary_list, get_multi_counts
+from qi_utilities.utility_functions.data_handling import StoreProjectRecord
 
 def split_raw_shots(result: Result,
                     qubit_list: list,
@@ -104,6 +107,23 @@ def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
         raw_data_probs_ro_corrected.append(probs_ro_corrected_dict)
     return raw_data_probs_ro_corrected
 
+def measure_ro_assignment_matrix(backend,
+                                 qubit_list,
+                                 nr_shots: int = 2**12):
+    
+    nr_qubits = len(qubit_list)
+    qc = QuantumCircuit(nr_qubits,
+                        name=f"Readout_Assignment_Matrix_{nr_qubits}_Qubits")
+    qc = apply_readout_circuit(qc, [idx for idx in range(nr_qubits)])
+    qc_transpiled = transpile(qc, backend, initial_layout=qubit_list)
+    job = backend.run(qc_transpiled, shots=nr_shots, memory = True)
+    result = job.result(timeout = 600)
+    StoreProjectRecord(job, silent=True)
+
+    raw_data_shots, ro_mitigation_shots = split_raw_shots(result, qubit_list)
+    ro_assignment_matrix = extract_ro_assignment_matrix(ro_mitigation_shots, qubit_list)
+
+    return ro_assignment_matrix
 
 def extract_ro_assignment_matrix(ro_mitigation_shots: list,
                                  qubit_list: list):
