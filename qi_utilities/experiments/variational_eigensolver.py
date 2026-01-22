@@ -144,14 +144,6 @@ class ExecuteVQE:
         self.num_clbits = self.variational_qc.to_instruction().num_clbits
         self.circuit_depth = self.variational_qc.depth()
 
-        qasm3_program = qasm3.dumps(self.variational_qc)
-        qasm3_program_path = (
-            Path(self.project_dir)
-            / f"qasm3_program_{self.date_timestamp}_{self.project_timestamp}.qasm"
-        )
-        with open(qasm3_program_path, 'w') as f:
-            f.write(qasm3_program)
-
         fig1 = self.variational_qc.draw('mpl', scale=1.3)
         fig1.suptitle(f'\n{self.date_timestamp}_{self.project_timestamp}\nVariational quantum circuit\nCircuit name: {self.circuit_name}\nNr variational parameters: {self.variational_qc.num_parameters}',
                       x = 0.5, y = 0.99, fontsize=16)
