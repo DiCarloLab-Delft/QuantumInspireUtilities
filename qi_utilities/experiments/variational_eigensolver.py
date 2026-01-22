@@ -227,7 +227,9 @@ class ExecuteVQE:
             high=np.pi,
             size=self.variational_qc.num_parameters
         )
-        self.ro_assignment_matrix = measure_ro_assignment_matrix(self.backend, self.qubit_list)
+        self.ro_assignment_matrix = measure_ro_assignment_matrix(self.backend,
+                                                                 self.qubit_list,
+                                                                 self.nr_shots)
 
         SPSA_optimizer = SPSA(
             maxiter=self.maxiter,
