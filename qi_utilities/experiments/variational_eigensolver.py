@@ -210,10 +210,6 @@ class ExecuteVQE:
         self._update_plot()  # <-- live plot update
 
         return output_energy
-    
-    def bounded_cost(self, y):
-        x = np.pi * np.tanh(y)
-        return self.cost_function(x)
 
     def run(self):
 
@@ -230,10 +226,11 @@ class ExecuteVQE:
             maxiter=self.maxiter,
             perturbation=0.1 * np.pi,
             learning_rate=0.05 * np.pi,
-            last_avg = 20
+            last_avg = 20,
+            blocking=True
             )
 
-        self.result = SPSA_optimizer.minimize(self.bounded_cost,
+        self.result = SPSA_optimizer.minimize(self.cost_function,
                                         x0 = initial_point)
         
         self.termination_status = True
