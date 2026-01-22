@@ -18,7 +18,7 @@ def hva_block(qc: QuantumCircuit,
               repetitions: int,
               var_parameters,
               parameter_idx):
-    hamiltonian = hamiltonian[::-1]
+    # hamiltonian = hamiltonian[::-1]
     for entry in range(len(hamiltonian)):
         pauli_string = hamiltonian.to_list()[entry][0]
 
@@ -70,28 +70,50 @@ def construct_hva_circuit(initial_state: str,
                                       repetitions=repetition_idx,
                                       var_parameters=var_parameters,
                                       parameter_idx=parameter_idx)
+        qc.barrier()
         apply_pre_measurement_rotations(qc, observable, [bit_register_idx, bit_register_idx+len(observable)-1])
         bit_register_idx += len(observable)
         qc.barrier()
 
     return qc
 
-def hardware_efficient_vqe(num_qubits,
+def hardware_efficient_vqe(nr_qubits,
+                           hamiltonian: SparsePauliOp,
                            repetitions):
-    parameters = ParameterVector('θ', num_qubits*(3*repetitions + 2)) #ex. parameters[0] is the first parameter
-    vqe_circuit = QuantumCircuit(num_qubits, num_qubits) #Quantum Circuit
-    for i in range(num_qubits):
-        vqe_circuit.initialize(0,i)
-        vqe_circuit.rx(parameters[2*i], i)
-        vqe_circuit.rz(parameters[2*i+1], i)
-    for repetition in range(repetitions):
-        for i in range(num_qubits):
-            for j in range(i+1, num_qubits):
-                if j == i:
-                    break
-                vqe_circuit.cz(i, j)
-            vqe_circuit.rz(parameters[2*num_qubits + 3*(num_qubits*repetition + i)], i)
-            vqe_circuit.rx(parameters[2*num_qubits + 3*(num_qubits*repetition + i) + 1], i)
-            vqe_circuit.rz(parameters[2*num_qubits + 3*(num_qubits*repetition + i) + 2], i)
+    
+    bit_register_size = 0
+    hamiltonian_terms = []
+    for entry in range(len(hamiltonian)):
+        hamiltonian_terms.append(hamiltonian.to_list()[entry][0])
+        bit_register_size += len(hamiltonian_terms[entry])
+
+    qc = QuantumCircuit(nr_qubits,
+                        bit_register_size,
+                        name=f"Hardware_Efficient_Ansatz_{nr_qubits}_Qubits")
+
+    var_parameters = ParameterVector('θ', nr_qubits*(3*repetitions + 2)) #ex. var_parameters[0] is the first parameter
+    
+    bit_register_idx = 0
+    for observable in hamiltonian_terms:
+        for i in range(nr_qubits):
+            qc.initialize(0,i)
+            qc.rx(var_parameters[2*i], i)
+            qc.rz(var_parameters[2*i+1], i)
+        for repetition in range(repetitions):
+            for i in range(nr_qubits):
+                for j in range(i+1, nr_qubits):
+                    if j == i:
+                        break
+                    qc.barrier()
+                    qc.cz(i, j)
+                    qc.barrier()
+                qc.rz(var_parameters[2*nr_qubits + 3*(nr_qubits*repetition + i)], i)
+                qc.rx(var_parameters[2*nr_qubits + 3*(nr_qubits*repetition + i) + 1], i)
+                qc.rz(var_parameters[2*nr_qubits + 3*(nr_qubits*repetition + i) + 2], i)
+
+        qc.barrier()
+        apply_pre_measurement_rotations(qc, observable, [bit_register_idx, bit_register_idx+len(observable)-1])
+        bit_register_idx += len(observable)
+        qc.barrier()
         
-    return vqe_circuit
+    return qc
