@@ -1,4 +1,5 @@
 import json
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -21,7 +22,12 @@ class ExecuteVQE:
                  qubit_list,
                  basis_gates,
                  nr_shots = 2**11,
-                 maxiter = 200,
+                 ro_matrix_recal_step = 30,
+                 spsa_maxiter = 125,
+                 spsa_perturbation = (0.1 / 2) * np.pi,
+                 spsa_learning_rate = (0.1 / 4) * np.pi,
+                 spsa_last_avg = 25,
+                 cost_function_lower_bound = None,
                  project_name = None):
         
         self.termination_status = False
@@ -33,7 +39,12 @@ class ExecuteVQE:
         self.qubit_list = qubit_list
         self.basis_gates = basis_gates
         self.nr_shots = nr_shots
-        self.maxiter = maxiter
+        self.ro_matrix_recal_step = ro_matrix_recal_step
+        self.maxiter = spsa_maxiter
+        self.perturbation = spsa_perturbation
+        self.learning_rate = spsa_learning_rate
+        self.last_avg = spsa_last_avg
+        self.cost_function_lower_bound = cost_function_lower_bound
         self.project_name = project_name
 
         if self.project_name == None:
@@ -46,7 +57,12 @@ class ExecuteVQE:
         self.create_project_directory()
         self._init_plot()  # Initialize live plot
         self.store_variational_circuit()
-        self.run()
+        
+        try:
+            self.run()
+        except:
+            print("Fatal error occured — trying to save partial results ...")
+            self.termination()
 
     def _init_plot(self):
         """Create a single live figure for VQE energy."""
@@ -55,20 +71,22 @@ class ExecuteVQE:
         matplotlib.use("Qt5Agg", force=True)
         plt.ion()
 
-        lower_bound = 0
-        coeffs = np.real(self.hamiltonian.coeffs)
-        for coeff in coeffs:
-            lower_bound -= np.abs(coeff)
+        if self.cost_function_lower_bound == None:
+            lower_bound = 0
+            coeffs = np.real(self.hamiltonian.coeffs)
+            for coeff in coeffs:
+                lower_bound -= np.abs(coeff)
+            self.cost_function_lower_bound = lower_bound
 
         self.fig, self.ax = plt.subplots()
         self.ax.set_xlabel("Iteration, k")
         self.ax.set_ylabel(f"Energy [{self.hamiltonian_units}]")
         self.ax.set_title(f"{self.date_timestamp}_{self.project_timestamp}\nVQE Energy Convergence")
-        self.ax.set_xlim(-0.1, 2*self.maxiter+1.1)
-        self.ax.set_ylim(1.1*lower_bound, 0.5*np.abs(lower_bound))
+        self.ax.set_xlim(-1.0, 2*self.maxiter+2.0)
+        self.ax.set_ylim(1.1*self.cost_function_lower_bound, 0.5*np.abs(self.cost_function_lower_bound))
         self.line, = self.ax.plot([], [], 'b-o', alpha=0.7,
                                   color='C0', linewidth=2, label='Data points')
-        self.ax.axhline(lower_bound, color='black',
+        self.ax.axhline(self.cost_function_lower_bound, color='black',
                         linestyle='--', alpha=0.7, linewidth=2, label='Lower bound')
         self.ax.legend()
 
@@ -81,8 +99,6 @@ class ExecuteVQE:
         """Update the live plot with current energies."""
         self.line.set_xdata(range(1, len(self.output_energies_list)+1))
         self.line.set_ydata(self.output_energies_list)
-        # self.ax.relim()
-        # self.ax.autoscale_view()
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
         plt.pause(0.001) # in order to process live the newest data points
@@ -108,10 +124,11 @@ class ExecuteVQE:
         general_dict = {}
         general_dict['Project name'] = self.project_name
         general_dict['Project timestamp'] = f"{self.date_timestamp}_{self.project_timestamp}"
-        general_dict['Termination status'] = self.termination_status
+        general_dict['Optimizer terminated successfully'] = self.termination_status
 
         general_dict['Backend info'] = {}
         general_dict['Experiment metadata'] = {}
+        general_dict['Optimizer metadata'] = {}
         general_dict['Experiment data'] = {}
 
         general_dict['Backend info']['Backend name'] = self.backend.name
@@ -120,15 +137,22 @@ class ExecuteVQE:
 
         general_dict['Experiment metadata']['Hamiltonian operator'] = {}
         general_dict['Experiment metadata']['Hamiltonian operator']['Paulis'] = self.hamiltonian.paulis.to_labels()
-        general_dict['Experiment metadata']['Hamiltonian operator']['Coefficients (real)'] = np.real(self.hamiltonian.coeffs).tolist()
+        general_dict['Experiment metadata']['Hamiltonian operator'][f'Coefficients (real) [{self.hamiltonian_units}]'] = np.real(self.hamiltonian.coeffs).tolist()
         general_dict['Experiment metadata']['Qubits used'] = self.qubit_list
         general_dict['Experiment metadata']['Number of shots'] = self.nr_shots
-        general_dict['Experiment metadata']['Readout assignment matrix'] = self.ro_assignment_matrix.tolist()
-        general_dict['Experiment metadata']['Optimizer maxiter'] = self.maxiter
+        general_dict['Experiment metadata']['Readout assignment matrix recalibration step'] = self.ro_matrix_recal_step
+        general_dict['Experiment metadata']['Readout assignment matrix (most recently measured)'] = self.ro_assignment_matrix.tolist()
         general_dict['Experiment metadata']['Jobs directories'] = self.job_directories
+        
+        general_dict['Optimizer metadata']['Maxiter'] = self.maxiter
+        general_dict['Optimizer metadata']['Perturbation'] = self.perturbation
+        general_dict['Optimizer metadata']['Learning rate'] = self.learning_rate
+        general_dict['Optimizer metadata']['Last average'] = self.last_avg
+        general_dict['Optimizer metadata'][f'Cost function lower bound [{self.hamiltonian_units}]'] = self.cost_function_lower_bound
 
-        general_dict['Experiment data']['var_parameters'] = self.var_parameter_list
-        general_dict['Experiment data']['output_energies'] = self.output_energies_list
+        if self.termination_status == True:
+            general_dict['Experiment data']['Final var_parameters'] = self.result.x.tolist()
+            general_dict['Experiment data'][f'Final output energy [{self.hamiltonian_units}]'] = self.result.fun
 
         file_path = (
             Path(self.project_dir)
@@ -136,6 +160,16 @@ class ExecuteVQE:
         )
         with open(file_path, 'w') as file:
             json.dump(general_dict, file, indent=3)
+            
+    def store_variational_data(self):
+        
+        hdf5_file_dir = (
+            Path(self.project_dir)
+            / f"variational_data_{self.date_timestamp}_{self.project_timestamp}.hdf5"
+        )
+        with h5py.File(hdf5_file_dir, 'a') as file:
+            file.create_dataset('Experimental Data/Variational parameters', data=self.var_parameter_list, compression="gzip")
+            file.create_dataset(f'Experimental Data/Output energies [{self.hamiltonian_units}]', data=self.output_energies_list, compression="gzip")
 
     def store_variational_circuit(self):
 
@@ -190,6 +224,11 @@ class ExecuteVQE:
     
     def cost_function(self,
                       var_parameters):
+        
+        if np.mod(len(self.output_energies_list), self.ro_matrix_recal_step) == 0:
+            self.ro_assignment_matrix = measure_ro_assignment_matrix(self.backend,
+                                                                 self.qubit_list,
+                                                                 self.nr_shots)
     
         qc_instance = self.make_ansatz(var_parameters)
         qc_instance_transpiled = transpile(qc_instance,
@@ -210,32 +249,19 @@ class ExecuteVQE:
         self._update_plot()  # <-- live plot update
 
         return output_energy
-
-    def run(self):
-
-        initial_point = np.random.uniform(
-            low=-np.pi,
-            high=np.pi,
-            size=self.variational_qc.num_parameters
-        )
-        self.ro_assignment_matrix = measure_ro_assignment_matrix(self.backend,
-                                                                 self.qubit_list,
-                                                                 self.nr_shots)
-
-        SPSA_optimizer = SPSA(
-            maxiter=self.maxiter,
-            perturbation=0.1 * np.pi,
-            learning_rate=0.05 * np.pi,
-            last_avg = 20,
-            blocking=True
-            )
-
-        self.result = SPSA_optimizer.minimize(self.cost_function,
-                                        x0 = initial_point)
+    
+    def termination(self):
         
-        self.termination_status = True
         self.store_project_json()
+        self.store_variational_data()
 
+        if self.termination_status == True:
+            self.ax.scatter([2*self.maxiter+1], [self.result.fun],
+                            alpha=1.0, color='green', zorder=10)
+            self.ax.axhline(self.result.fun, color='green',
+                        linestyle='--', alpha=1.0, linewidth=2,
+                        label='Final experimental result')
+            self.ax.legend()
         vqe_fig_path = (
             Path(self.project_dir)
             / f"vqe_run_{self.date_timestamp}_{self.project_timestamp}.png"
@@ -244,3 +270,22 @@ class ExecuteVQE:
 
         import matplotlib
         matplotlib.use(self.init_mpl_backend, force=True)
+
+    def run(self):
+
+        initial_point = np.random.uniform(
+            low=-np.pi,
+            high=np.pi,
+            size=self.variational_qc.num_parameters
+        )
+
+        SPSA_optimizer = SPSA(
+            maxiter=self.maxiter,
+            perturbation=self.perturbation,
+            learning_rate=self.learning_rate,
+            last_avg = self.last_avg
+            )
+        self.result = SPSA_optimizer.minimize(self.cost_function,
+                                        x0 = initial_point)
+        self.termination_status = True
+        self.termination()
