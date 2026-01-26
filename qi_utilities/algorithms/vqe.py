@@ -85,7 +85,8 @@ def hardware_efficient_vqe(nr_qubits,
     hamiltonian_terms = []
     for entry in range(len(hamiltonian)):
         hamiltonian_terms.append(hamiltonian.to_list()[entry][0])
-        bit_register_size += len(hamiltonian_terms[entry])
+        reduced_term = hamiltonian_terms[entry].replace("I", "")
+        bit_register_size += len(reduced_term)
 
     qc = QuantumCircuit(nr_qubits,
                         bit_register_size,
@@ -95,6 +96,7 @@ def hardware_efficient_vqe(nr_qubits,
     
     bit_register_idx = 0
     for observable in hamiltonian_terms:
+        reduced_observable = observable.replace("I", "")
         for i in range(nr_qubits):
             qc.initialize(0,i)
             qc.rx(var_parameters[2*i], i)
@@ -112,8 +114,8 @@ def hardware_efficient_vqe(nr_qubits,
                 qc.rz(var_parameters[2*nr_qubits + 3*(nr_qubits*repetition + i) + 2], i)
 
         qc.barrier()
-        apply_pre_measurement_rotations(qc, observable, [bit_register_idx, bit_register_idx+len(observable)-1])
-        bit_register_idx += len(observable)
+        apply_pre_measurement_rotations(qc, observable, [bit_register_idx, bit_register_idx+len(reduced_observable)-1])
+        bit_register_idx += len(reduced_observable)
         qc.barrier()
         
     return qc

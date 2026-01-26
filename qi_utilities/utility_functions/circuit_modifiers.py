@@ -71,9 +71,10 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
     """
     
     nr_qubits = len(observable)
+    reduced_observable = observable.replace("I", "")
     for idx in range(nr_qubits):
         if observable[idx] == 'I':
-            return qc
+            continue
         
         elif observable[idx] == 'X':
             qc.ry(-np.pi/2,(nr_qubits-1)-idx)
@@ -83,9 +84,9 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
             pass
 
         if bit_register is not None:
-            qc.measure((nr_qubits-1)-idx, bit_register[(nr_qubits-1)-idx])
+            qc.measure((nr_qubits-1)-idx, bit_register[(len(reduced_observable)-1)-idx])
         else:
-            qc.measure((nr_qubits-1)-idx,(nr_qubits-1)-idx)
+            qc.measure((nr_qubits-1)-idx,(len(reduced_observable)-1)-idx)
 
     return qc
 

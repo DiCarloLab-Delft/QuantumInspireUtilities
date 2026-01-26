@@ -237,7 +237,7 @@ class ExecuteVQE:
                                 basis_gates=self.basis_gates)
         
         job = self.backend.run(qc_instance_transpiled, shots=self.nr_shots, memory=True)
-        result = job.result(timeout = 6 * 600)
+        result = job.result(timeout = 10 * 6 * 600)
         job_record = StoreProjectRecord(job, silent=True)
         output_energy = self.calculate_energy(result)
 
