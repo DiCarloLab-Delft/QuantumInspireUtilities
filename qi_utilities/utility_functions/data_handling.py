@@ -30,13 +30,18 @@ class StoreProjectRecord:
 
     def __init__(self,
                  job: QIJob,
-                 silent: bool = False):
+                 silent: bool = False,
+                 store_circuit_figures: bool = True):
         """
         Args:
             job (QIJob):
                 The user already-submitted job object, more correctly referred to as
                 'project'. A project can contain multiple jobs, but for simplification,
                 and also for legacy reasons, we keep referring to it as the 'job'.
+                
+            store_circuit_figures (bool):
+                A user-configurable flag for storing locally the circuit PNG file.
+                Useful to set to False when the circuit is too large.
         """
 
         self.create_project_directory(job)
@@ -44,7 +49,7 @@ class StoreProjectRecord:
         self.store_project_json()
         for job_idx in range(len(job.circuits_run_data)):
             self.create_job_directory(job, job_idx)
-            self.store_circuit_metadata(job, job_idx)
+            self.store_circuit_metadata(job, job_idx, store_circuit_figures)
             self.store_job_result(job, job_idx)
             if self.raw_data_memory == True:
                 self.store_raw_data(job, job_idx)
@@ -222,7 +227,8 @@ class StoreProjectRecord:
 
     def store_circuit_metadata(self,
                                job: QIJob,
-                               job_idx: int):
+                               job_idx: int,
+                               store_circuit_figures: bool = True):
         """
         This instance method stores the job circuit metadata, i.e. bookkeeping
         records, cQASM_v3 and OpenQASM3 program files, as well as the circuit
@@ -241,6 +247,10 @@ class StoreProjectRecord:
                 Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
+                
+            store_circuit_figures (bool):
+                A user-configurable flag for storing locally the circuit PNG file.
+                Useful to set to False when the circuit is too large.
         """
 
         self.qc = job.circuits_run_data[job_idx].circuit
@@ -264,16 +274,16 @@ class StoreProjectRecord:
         with open(cqasm_v3_program_path, 'w') as f:
             f.write(cqasm_v3_program)
 
-        fig1 = self.qc.draw('mpl', scale=1.3)
-        fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
-                      x = 0.5, y = 0.99, fontsize=16)
-        fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
-        circuit_fig_path = (
-            Path(self.job_dir)
-            / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
-        )
-        fig1.savefig(circuit_fig_path)
-        plt.close(fig1)
+        if store_circuit_figures == True:
+            fig1 = self.qc.draw('mpl', scale=1.3)
+            fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
+                        x = 0.5, y = 0.99, fontsize=16)
+            fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
+            circuit_fig_path = (
+                Path(self.job_dir)
+                / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
+            )
+            fig1.savefig(circuit_fig_path)
 
     def store_raw_data(self,
                        job: QIJob,
@@ -337,13 +347,13 @@ class StoreProjectRecord:
 class RetrieveProjectRecord:
     """
     This class is responsible for retrieving a single job record
-    within the user's local 'Documents' directory, by providing as inputs
-    the appropriate job timestamp, name, and Job ID. Those three variables
-    uniquely identify a single job in the projects directory.
+    within the user's local 'Documents' directory, by providing as only input
+    the appropriate Job ID. The Jod ID uniquely identifies a single
+    job in the projects directory.
 
     It is meant to mimic 'result = job.result()', so that when the user runs
 
-    loaded_result = RetrieveProjectRecord(timestamp, project_name, job_id)
+    loaded_result = RetrieveProjectRecord(job_id)
 
     then they can obtain the measurement counts and raw data as
 
@@ -352,40 +362,24 @@ class RetrieveProjectRecord:
     """
 
     def __init__(self,
-                 timestamp: str,
-                 project_name: str,
                  job_id: str):
         """
         Args:
-            timestamp (str):
-                The job complete timestamp, to be parsed as 'YYYYMMDD_HHMMSS'.
-            
-            project_name (str):
-                The original project name.
-            
             job_id (str):
                 The Job ID, as this appears also in the Quantum Inspire platform.
         """
         
-        self.timestamp = timestamp
-        self.project_name = project_name
         self.job_id = job_id
-
-        date_timestamp = self.timestamp.split('_')[0]
-        job_timestamp = self.timestamp.split('_')[1]
-
         project_dir = (
-            Path.home() / "Documents" / "QuantumInspireProjects" / date_timestamp
-            / f"{job_timestamp}_{self.project_name}"
+            Path.home() / "Documents" / "QuantumInspireProjects"
         )
-
+        
         self.job_dir = None
-        jobs_folders = [p for p in project_dir.iterdir() if p.is_dir()]
-        for dir_entry in jobs_folders:
-            if self.job_id in dir_entry.name:
-                self.job_dir = dir_entry
+        for job_dir_path in project_dir.rglob("*"):
+            if job_dir_path.is_dir() and job_id in job_dir_path.name:
+                self.job_dir = job_dir_path
         if self.job_dir == None:
-            raise ValueError(f'No files found for timestamp: {timestamp}, project name: {project_name}, and Job ID: {job_id}')
+            raise ValueError(f'No files found for Job ID: {job_id}')
 
         self.retrieve_qc()
         self.get_counts()
@@ -396,9 +390,10 @@ class RetrieveProjectRecord:
         This instance method retrieves the QuantumCircuit object of the job.
         """
 
-        qasm3_file_path = (
-            Path(self.job_dir)
-            / f"qasm3_program_{self.timestamp}.qasm"
+        qasm3_file_path = next(
+            file_path
+            for file_path in self.job_dir.iterdir()
+            if "qasm3_program" in file_path.name
         )
         self.qc = qasm3.load(qasm3_file_path)
 
@@ -407,9 +402,10 @@ class RetrieveProjectRecord:
         This instance method retrieves the job counts in a dictionary format.
         """
 
-        json_file_path = (
-            Path(self.job_dir)
-            / f"job_result_{self.timestamp}.json"
+        json_file_path = next(
+            file_path
+            for file_path in self.job_dir.iterdir()
+            if "job_result" in file_path.name
         )
 
         with open(json_file_path, 'r') as file:
@@ -443,12 +439,13 @@ class RetrieveProjectRecord:
                 respect to other functions used in other modules.
         """
 
-        hdf5_file_dir = (
-            Path(self.job_dir)
-            / f"raw_data_{self.timestamp}.hdf5"
-        )
-
         try:
+            hdf5_file_dir = next(
+                file_path
+                for file_path in self.job_dir.iterdir()
+                if "raw_data" in file_path.name
+            )
+            
             with h5py.File(hdf5_file_dir, "r") as f:
                 hdf5_data = f["Experimental Data"]["Data"][()]
             raw_shots = []
