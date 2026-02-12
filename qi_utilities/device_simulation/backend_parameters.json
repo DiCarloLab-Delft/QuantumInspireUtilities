@@ -77,7 +77,7 @@
         },
         "Measurement duration [s]": 1.0e-6,
         "Delay duration [s]": 20e-9,
-        "Base temperature [K]": 40e-3,
+        "Base temperature [K]": 15e-3,
         "Native operations": ["id", "s", "sdg", "t", "tdg", "x", "rx", "y", "ry", "z", "cz", "delay", "reset", "measure"],
         "Coupling map": [
             [0, 2], [2, 0],
