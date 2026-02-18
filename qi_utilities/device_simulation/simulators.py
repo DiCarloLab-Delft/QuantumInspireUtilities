@@ -3,8 +3,53 @@ import json
 from qiskit import QuantumCircuit, transpiler, transpile
 from qiskit.circuit import Delay
 from qiskit.circuit import CircuitInstruction
-from qiskit_aer import AerSimulator
+from qiskit_aer import AerSimulator, AerJob
 from qi_utilities.device_simulation.noise_modelling import create_noise_model
+
+from dataclasses import dataclass
+import uuid
+from datetime import datetime
+
+@dataclass
+class job_result_data:
+    job_id: uuid.UUID
+    created_on: datetime
+    shots_requested: int
+    shots_done: int
+    results: dict[str, int]
+    raw_data: list | None = None
+    execution_time_in_seconds: float = 0.0
+    id: str = ''
+
+@dataclass
+class circuit_run_data:
+    circuit: QuantumCircuit
+    job_id: uuid.UUID
+    results: job_result_data
+
+class SimulatorJob(AerJob):
+    def __init__(self, backend, job_id, fn, circuits=None, parameter_binds=None, run_options=None, executor=None):
+        self.program_name = circuits[0].name
+        super().__init__(backend, job_id, fn, circuits, parameter_binds, run_options, executor)
+
+    def result(self, timeout=None):
+        result = super().result(timeout)
+        self.circuits_run_data = [
+            circuit_run_data(
+                circuit = circuit,
+                job_id=self.job_id(),
+                results = job_result_data(
+                    created_on=datetime.now(),
+                    job_id=self.job_id(),
+                    shots_requested=self._run_options['shots'],
+                    shots_done=self._run_options['shots'],
+                    results=result.get_counts(idx),
+                    raw_data=result.get_memory(idx) if self._run_options.get('memory',False) else None,
+                )
+            )
+            for idx, circuit in enumerate(self.circuits())
+        ]
+        return result
 
 class NoisySimulator(AerSimulator):
     
@@ -83,3 +128,18 @@ class NoisySimulator(AerSimulator):
                            optimization_level = 0,
                            shots = shots,
                            memory = memory)
+    
+    def _run_circuits(self, circuits, parameter_binds, **run_options):
+        # Submit job
+        job_id = str(uuid.uuid4())
+        aer_job = SimulatorJob(
+            self,
+            job_id,
+            self._execute_circuits_job,
+            parameter_binds=parameter_binds,
+            circuits=circuits,
+            run_options=run_options,
+        )
+        aer_job.submit()
+
+        return aer_job
