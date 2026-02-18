@@ -1,7 +1,9 @@
-from qiskit_aer import AerSimulator
-from qiskit import transpiler, transpile
-import json
 import os
+import json
+from qiskit import QuantumCircuit, transpiler, transpile
+from qiskit.circuit import Delay
+from qiskit.circuit import CircuitInstruction
+from qiskit_aer import AerSimulator
 from qi_utilities.device_simulation.noise_modelling import create_noise_model
 
 class NoisySimulator(AerSimulator):
@@ -30,15 +32,51 @@ class NoisySimulator(AerSimulator):
         self.description = f'A custom C++ Qasm simulator of {backend_name}'
         self.options.shots = simulator_specs['Default shots']
         self.max_shots = simulator_specs['Max shots']
+
+    def unpack_qc_delays(self,
+                         qc: QuantumCircuit):
+
+        qc_new = QuantumCircuit(qc.num_qubits,
+                                qc.num_clbits,
+                                name = qc.name)
+
+        for instruction_idx in range(len(qc)):
+            if qc[instruction_idx].operation.name == 'delay':
+                for repetition in range(qc[instruction_idx].operation.duration):
+                    unit_delay_operation = Delay(duration = 1)
+                    unit_delay_instruction = CircuitInstruction(operation=unit_delay_operation,
+                                                                qubits=qc[instruction_idx].qubits)
+                    qc_new.append(unit_delay_instruction)
+            else:
+                qc_new.append(qc[instruction_idx])
+
+        return qc_new
             
-    def run(self, qc, shots, memory = False):
+    def run(self,
+            qc,
+            shots,
+            memory = False):
         
         # Force internal compilation according to simulator basis gates
         # and coupling map
-        transpiled_qc = transpile(qc,
-                                  self,
-                                  coupling_map=self.coupling_map,
-                                  basis_gates=self.basis_gates)
+        if type(qc) == list:
+            transpiled_qc = []
+            for qc_idx in range(len(qc)):
+                transpiled_qc.append(transpile(qc[qc_idx],
+                                        backend = self,
+                                        layout_method = "trivial",
+                                        routing_method = "none",
+                                        optimization_level = 0,
+                                        basis_gates = self.basis_gates))
+        else:
+            transpiled_qc = transpile(qc,
+                                      backend = self,
+                                      layout_method = "trivial",
+                                      routing_method = "none",
+                                      optimization_level = 0,
+                                      basis_gates = self.basis_gates)
+        self.executed_qc = transpiled_qc # for documentation purposes
+        transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
         
         return super().run(transpiled_qc,
                            noise_model=self.noise_model,
