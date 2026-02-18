@@ -64,7 +64,7 @@ class NoisySimulator(AerSimulator):
     
     def __init__(self,
                  backend_name,
-                 model_noise = True):
+                 ideal_simulation = False):
         
         device_simulation_path = os.path.dirname(os.path.abspath(__file__))
         json_path = os.path.join(device_simulation_path, 'backend_parameters.json')
@@ -73,7 +73,7 @@ class NoisySimulator(AerSimulator):
             
         self.basis_gates = simulator_specs['Native operations']
         coupling_map = transpiler.CouplingMap(simulator_specs['Coupling map'])
-        if model_noise == True:
+        if ideal_simulation == False:
             self.noise_model = create_noise_model(simulator_specs)
         else:
             self.noise_model = None
@@ -116,12 +116,14 @@ class NoisySimulator(AerSimulator):
         if type(qc) == list:
             transpiled_qc = []
             for qc_idx in range(len(qc)):
-                transpiled_qc.append(transpile(qc[qc_idx],
+                single_transpiled_qc = transpile(qc[qc_idx],
                                         backend = self,
                                         layout_method = "trivial",
                                         routing_method = "none",
                                         optimization_level = 0,
-                                        basis_gates = self.basis_gates))
+                                        basis_gates = self.basis_gates)
+                single_transpiled_qc = self.unpack_qc_delays(single_transpiled_qc) # so that noise during delay is applied correctly
+                transpiled_qc.append(single_transpiled_qc)
         else:
             transpiled_qc = transpile(qc,
                                       backend = self,
@@ -129,8 +131,7 @@ class NoisySimulator(AerSimulator):
                                       routing_method = "none",
                                       optimization_level = 0,
                                       basis_gates = self.basis_gates)
-        self.executed_qc = transpiled_qc # for documentation purposes
-        transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
+            transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
         
         return super().run(transpiled_qc,
                            noise_model=self.noise_model,
