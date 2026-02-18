@@ -1,3 +1,10 @@
+"""
+Functions for creating noise models compatible with the
+Qiskit Aer Simulator.
+
+Authors: Marios Samiotis
+"""
+
 from qiskit_aer import noise
 from scipy.constants import Planck, Boltzmann
 import ast

@@ -1,14 +1,23 @@
+"""
+Utility classes for creating a general (noisy) simulator using
+the Qiskit AerSimulator class.
+
+The AerJob is modified in such a way so that the returned results
+have a simular structure to that of QIJob of the Quantum Inspire SDK.
+
+Authors: Marios Samiotis, Jan Hemink
+"""
+
 import os
 import json
+import uuid
+from datetime import datetime
+from dataclasses import dataclass
 from qiskit import QuantumCircuit, transpiler, transpile
 from qiskit.circuit import Delay
 from qiskit.circuit import CircuitInstruction
 from qiskit_aer import AerSimulator, AerJob
 from qi_utilities.device_simulation.noise_modelling import create_noise_model
-
-from dataclasses import dataclass
-import uuid
-from datetime import datetime
 
 @dataclass
 class job_result_data:
