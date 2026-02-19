@@ -11,6 +11,7 @@ Authors: Marios Samiotis, Jan Hemink
 import os
 import json
 import uuid
+from typing import Union, List
 from datetime import datetime
 from dataclasses import dataclass
 from qiskit import QuantumCircuit, transpiler, transpile
@@ -110,23 +111,30 @@ class NoisySimulator(AerSimulator):
         self.max_shots = simulator_specs['Max shots']
 
     def unpack_qc_delays(self,
-                         qc: QuantumCircuit):
-
-        qc_new = QuantumCircuit(qc.num_qubits,
-                                qc.num_clbits,
-                                name = qc.name)
-
-        for instruction_idx in range(len(qc)):
-            if qc[instruction_idx].operation.name == 'delay':
-                for repetition in range(qc[instruction_idx].operation.duration):
-                    unit_delay_operation = Delay(duration = 1)
-                    unit_delay_instruction = CircuitInstruction(operation=unit_delay_operation,
-                                                                qubits=qc[instruction_idx].qubits)
-                    qc_new.append(unit_delay_instruction)
-            else:
-                qc_new.append(qc[instruction_idx])
-
-        return qc_new
+                         qc: Union[QuantumCircuit, List[QuantumCircuit]]):
+        
+        def apply_delay_unpacking(qc: QuantumCircuit):
+            qc_new = QuantumCircuit(qc.num_qubits,
+                                    qc.num_clbits,
+                                    name = qc.name)
+            for instruction_idx in range(len(qc)):
+                if qc[instruction_idx].operation.name == 'delay':
+                    for repetition in range(qc[instruction_idx].operation.duration):
+                        unit_delay_operation = Delay(duration = 1)
+                        unit_delay_instruction = CircuitInstruction(operation=unit_delay_operation,
+                                                                    qubits=qc[instruction_idx].qubits)
+                        qc_new.append(unit_delay_instruction)
+                else:
+                    qc_new.append(qc[instruction_idx])
+            return qc_new
+        
+        if type(qc) == list:
+            qc_list = []
+            for circuit_idx in range(len(qc)):
+                qc_list.append(apply_delay_unpacking(qc[circuit_idx]))
+            return qc_list
+        else:
+            return apply_delay_unpacking(qc)
             
     def run(self,
             qc,
@@ -135,25 +143,13 @@ class NoisySimulator(AerSimulator):
         
         # Force internal compilation according to simulator basis gates
         # and coupling map
-        if type(qc) == list:
-            transpiled_qc = []
-            for qc_idx in range(len(qc)):
-                single_transpiled_qc = transpile(qc[qc_idx],
-                                        backend = self,
-                                        layout_method = "trivial",
-                                        routing_method = "none",
-                                        optimization_level = 0,
-                                        basis_gates = self.basis_gates)
-                single_transpiled_qc = self.unpack_qc_delays(single_transpiled_qc) # so that noise during delay is applied correctly
-                transpiled_qc.append(single_transpiled_qc)
-        else:
-            transpiled_qc = transpile(qc,
-                                      backend = self,
-                                      layout_method = "trivial",
-                                      routing_method = "none",
-                                      optimization_level = 0,
-                                      basis_gates = self.basis_gates)
-            transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
+        transpiled_qc = transpile(qc,
+                                  backend = self,
+                                  layout_method = "trivial",
+                                  routing_method = "none",
+                                  optimization_level = 0,
+                                  basis_gates = self.basis_gates)
+        transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
         
         return super().run(transpiled_qc,
                            noise_model=self.noise_model,
