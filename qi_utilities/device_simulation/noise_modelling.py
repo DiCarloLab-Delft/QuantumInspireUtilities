@@ -10,8 +10,8 @@ from scipy.constants import Planck, Boltzmann
 import ast
 import numpy as np
 
-T1_FUDGE_FACTOR = 1.2
-T2_FUDGE_FACTOR = 1.5
+T1_FUDGE_FACTOR = 1.3
+T2_FUDGE_FACTOR = 1.3
 
 def depolarization_param(num_qubits,
                          epsilon_cl):

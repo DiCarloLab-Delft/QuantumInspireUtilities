@@ -36,6 +36,26 @@ class circuit_run_data:
     job_id: uuid.UUID
     results: job_result_data
 
+class ResultOrderedCounts:
+    def __init__(self, qiskit_result):
+        self._result = qiskit_result
+
+    def get_counts(self, experiment=None):
+        original_counts = self._result.get_counts(experiment)
+        if len(original_counts) == 0:
+            return original_counts
+        bit_length = len(next(iter(original_counts)))
+
+        ordered_counts = {}
+        for bitstring_idx in range(2**bit_length):
+            bitstring = format(bitstring_idx, f'0{bit_length}b')
+            ordered_counts[bitstring] = original_counts.get(bitstring, 0)
+
+        return ordered_counts
+
+    def __getattr__(self, name):
+        return getattr(self._result, name)
+
 class SimulatorJob(AerJob):
     def __init__(self, backend, job_id, fn, circuits=None, parameter_binds=None, run_options=None, executor=None):
         self.program_name = circuits[0].name
@@ -43,6 +63,8 @@ class SimulatorJob(AerJob):
 
     def result(self, timeout=None):
         result = super().result(timeout)
+        if self._run_options.get('memory', False) == False:
+            result = ResultOrderedCounts(result)
         self.circuits_run_data = [
             circuit_run_data(
                 circuit = circuit,
@@ -53,7 +75,7 @@ class SimulatorJob(AerJob):
                     shots_requested=self._run_options['shots'],
                     shots_done=self._run_options['shots'],
                     results=result.get_counts(idx),
-                    raw_data=result.get_memory(idx) if self._run_options.get('memory',False) else None,
+                    raw_data=result.get_memory(idx) if self._run_options.get('memory', False) else None,
                 )
             )
             for idx, circuit in enumerate(self.circuits())

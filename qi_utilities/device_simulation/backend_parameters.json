@@ -7,8 +7,8 @@
                 "T2 [s]": 11.3e-6,
                 "RB error": 6.614e-4,
                 "SSRO": {
-                    "p0given1": 0.0334,
-                    "p1given0": 0.0049
+                    "p0given1": 0.0155,
+                    "p1given0": 0.0033
                 }},
             "Q1": {
                 "Frequency [Hz]": 6.227e9,
@@ -16,8 +16,8 @@
                 "T2 [s]": 6.5e-6,
                 "RB error": 8.72e-4,
                 "SSRO": {
-                    "p0given1": 0.0226,
-                    "p1given0": 0.0024
+                    "p0given1": 0.0209,
+                    "p1given0": 0.0018
                 }},
             "Q2": {
                 "Frequency [Hz]": 5.590e9,
@@ -25,8 +25,8 @@
                 "T2 [s]": 4.9e-6,
                 "RB error": 0.00167,
                 "SSRO": {
-                    "p0given1": 0.0179,
-                    "p1given0": 0.0111
+                    "p0given1": 0.0110,
+                    "p1given0": 0.0054
                 }},
             "Q3": {
                 "Frequency [Hz]": 5.757e9,
@@ -34,8 +34,8 @@
                 "T2 [s]": 13.1e-6,
                 "RB error": 0.00167,
                 "SSRO": {
-                    "p0given1": 0.0521,
-                    "p1given0": 0.0327
+                    "p0given1": 0.0418,
+                    "p1given0": 0.0233
                 }},
             "Q4": {
                 "Frequency [Hz]": 5.753e9,
@@ -43,8 +43,8 @@
                 "T2 [s]": 15.2e-6,
                 "RB error": 0.00128,
                 "SSRO": {
-                    "p0given1": 0.0553,
-                    "p1given0": 0.0212
+                    "p0given1": 0.0442,
+                    "p1given0": 0.0153
                 }},
             "Q5": {
                 "Frequency [Hz]": 4.484e9,
@@ -52,8 +52,8 @@
                 "T2 [s]": 2.6e-6,
                 "RB error": 4.7e-4,
                 "SSRO": {
-                    "p0given1": 0.0507,
-                    "p1given0": 0.0541
+                    "p0given1": 0.0161,
+                    "p1given0": 0.0126
                 }},
             "Q6": {
                 "Frequency [Hz]": 4.659e9,
@@ -61,8 +61,8 @@
                 "T2 [s]": 4.7e-6,
                 "RB error": 4.7e-4,
                 "SSRO": {
-                    "p0given1": 0.0244,
-                    "p1given0": 0.0571
+                    "p0given1": 0.0171,
+                    "p1given0": 0.0033
                 }}
         },
         "CZ IRB errors":{
