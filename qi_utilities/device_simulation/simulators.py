@@ -3,7 +3,7 @@ Utility classes for creating a general (noisy) simulator using
 the Qiskit AerSimulator class.
 
 The AerJob is modified in such a way so that the returned results
-have a simular structure to that of QIJob of the Quantum Inspire SDK.
+have a simular structure to those of QIJob of the Quantum Inspire SDK.
 
 Authors: Marios Samiotis, Jan Hemink
 """
@@ -38,6 +38,12 @@ class circuit_run_data:
     results: job_result_data
 
 class ResultOrderedCounts:
+    """
+    Wrapper class that modifies the ordering of binary strings
+    in the counts dictionary so that they are returned in
+    incremental binary order.
+    """
+
     def __init__(self, qiskit_result):
         self._result = qiskit_result
 
@@ -58,11 +64,20 @@ class ResultOrderedCounts:
         return getattr(self._result, name)
 
 class SimulatorJob(AerJob):
+    """
+    Child class of AerJob that modifies the job object to include
+    experiment metadata, similar to how the QIJob object in the
+    Quantum Inspire SDK handles it. This facilitates documentation
+    and integration with the StoreProjectRecord class from the
+    data_handling module.
+    """
+
     def __init__(self, backend, job_id, fn, circuits=None, parameter_binds=None, run_options=None, executor=None):
         self.program_name = circuits[0].name
         super().__init__(backend, job_id, fn, circuits, parameter_binds, run_options, executor)
 
-    def result(self, timeout=None):
+    def result(self,
+               timeout: float = None):
         result = super().result(timeout)
         if self._run_options.get('memory', False) == False:
             result = ResultOrderedCounts(result)
@@ -84,10 +99,27 @@ class SimulatorJob(AerJob):
         return result
 
 class NoisySimulator(AerSimulator):
+    """
+    Class for creating a noisy (or noiseless) Aer simulator that mimics
+    functionally the QI backends in the way that it accepts quantum circuits
+    and returns job data/metadata. The class is intended to be used for development
+    purposes whenever all hardware of Quantum Inspire become momentarily
+    unavailable for use.
+    """
     
     def __init__(self,
-                 backend_name,
-                 ideal_simulation = False):
+                 backend_name: str,
+                 ideal_simulation: bool = False):
+        """
+        Args:
+            backend_name (str):
+                The name of the simulated backend, as this is listed within the
+                backend_parameters JSON file.
+
+            ideal_simulation (bool):
+                Boolean option for if the user prefers to use ideal simulation (True)
+                instead of a noisy one (False).
+        """
         
         device_simulation_path = os.path.dirname(os.path.abspath(__file__))
         json_path = os.path.join(device_simulation_path, 'backend_parameters.json')
@@ -112,6 +144,16 @@ class NoisySimulator(AerSimulator):
 
     def unpack_qc_delays(self,
                          qc: Union[QuantumCircuit, List[QuantumCircuit]]):
+        """
+        This instance method is used to unpack delay operations of (N * dt) duration
+        into [N * (1 * dt)] delay operations, so that relaxation and pure dephasing
+        noise is correctly applied on each individual delay operation.
+
+        Args:
+            qc (QuantumCircuit or List[QuantumCircuit]):
+            The quantum circuit object. Can also be a list containing
+            multiple quantum circuits.
+        """
         
         def apply_delay_unpacking(qc: QuantumCircuit):
             qc_new = QuantumCircuit(qc.num_qubits,
@@ -137,9 +179,9 @@ class NoisySimulator(AerSimulator):
             return apply_delay_unpacking(qc)
             
     def run(self,
-            qc,
-            shots,
-            memory = False):
+            qc: Union[QuantumCircuit, List[QuantumCircuit]],
+            shots: int,
+            memory: bool = False):
         
         # Force internal compilation according to simulator basis gates
         # and coupling map
@@ -149,7 +191,10 @@ class NoisySimulator(AerSimulator):
                                   routing_method = "none",
                                   optimization_level = 0,
                                   basis_gates = self.basis_gates)
-        transpiled_qc = self.unpack_qc_delays(transpiled_qc) # so that noise during delay is applied correctly
+        
+        # The line below ensures that noise during the delay operation
+        # is applied correctly
+        transpiled_qc = self.unpack_qc_delays(transpiled_qc)
         
         return super().run(transpiled_qc,
                            noise_model=self.noise_model,
