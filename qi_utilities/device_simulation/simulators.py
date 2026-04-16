@@ -109,7 +109,14 @@ class NoisySimulator(AerSimulator):
     
     def __init__(self,
                  backend_name: str,
-                 ideal_simulation: bool = False):
+                 ideal_simulation: bool = False,
+                 noise_applied: dict = {
+                     'delay_T1_T2': True,
+                     'sq_depolarization': True,
+                     'readout_T1_T2': True,
+                     'readout_assignment': True,
+                     'CZ_depolarization': True
+                 }):
         """
         Args:
             backend_name (str):
@@ -129,7 +136,8 @@ class NoisySimulator(AerSimulator):
         self.basis_gates = simulator_specs['Native operations']
         coupling_map = transpiler.CouplingMap(simulator_specs['Coupling map'])
         if ideal_simulation == False:
-            self.noise_model = create_noise_model(simulator_specs)
+            self.noise_model = create_noise_model(simulator_specs,
+                                                  noise_applied)
         else:
             self.noise_model = None
         super().__init__(n_qubits = simulator_specs['Qubit register'],

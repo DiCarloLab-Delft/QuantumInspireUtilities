@@ -31,7 +31,14 @@ def depolarization_param(num_qubits: int,
     lambda_rate = (2**(2*num_qubits)-1)/2**(2*num_qubits) * (1-p_RB_decay)
     return lambda_rate
 
-def create_noise_model(processor_specs: dict):
+def create_noise_model(processor_specs: dict,
+                       noise_applied: dict = {
+                             'delay_T1_T2': True,
+                             'sq_depolarization': True,
+                             'readout_T1_T2': True,
+                             'readout_assignment': True,
+                             'CZ_depolarization': True
+                        }):
     """
     This function instantiates a Qiskit NoiseModel from a given processor
     specs dictionary. The noise model includes:
@@ -83,10 +90,14 @@ def create_noise_model(processor_specs: dict):
                                              [processor_specs['Qubits'][qubit_list[qubit_idx]]['SSRO']['p0given1'],
                                               1 - processor_specs['Qubits'][qubit_list[qubit_idx]]['SSRO']['p0given1']]])
         
-        simulator_noise_model.add_quantum_error(relaxation_dephasing_delay, ['delay'], [qubit_idx], warnings=False)
-        simulator_noise_model.add_quantum_error(relaxation_dephasing_measure, ['measure'], [qubit_idx], warnings=False)
-        simulator_noise_model.add_quantum_error(depolarizing_error, ['id', 's', 'sdg', 't', 'tdg', 'x', 'rx', 'y', 'ry', 'z'], [qubit_idx], warnings=False)
-        simulator_noise_model.add_readout_error(readout_error, [qubit_idx])
+        if noise_applied['delay_T1_T2'] == True:
+            simulator_noise_model.add_quantum_error(relaxation_dephasing_delay, ['delay'], [qubit_idx], warnings=False)
+        if noise_applied['sq_depolarization'] == True:
+            simulator_noise_model.add_quantum_error(depolarizing_error, ['id', 's', 'sdg', 't', 'tdg', 'x', 'rx', 'y', 'ry', 'z'], [qubit_idx], warnings=False)
+        if noise_applied['readout_T1_T2'] == True:
+            simulator_noise_model.add_quantum_error(relaxation_dephasing_measure, ['measure'], [qubit_idx], warnings=False)
+        if noise_applied['readout_assignment'] == True:
+            simulator_noise_model.add_readout_error(readout_error, [qubit_idx])
         
     for CZ_idx in range(len(CZ_list)):
         
@@ -94,7 +105,8 @@ def create_noise_model(processor_specs: dict):
         lambda_param = depolarization_param(num_qubits=2, epsilon_cl=epsilon_cl)
         depolarizing_error_CZ = noise.depolarizing_error(param=lambda_param, num_qubits=2)
         
-        simulator_noise_model.add_quantum_error(depolarizing_error_CZ, ['cz'], ast.literal_eval(CZ_list[CZ_idx]), warnings=False)
-        simulator_noise_model.add_quantum_error(depolarizing_error_CZ, ['cz'], ast.literal_eval(CZ_list[CZ_idx])[::-1], warnings=False)
+        if noise_applied['CZ_depolarization'] == True:
+            simulator_noise_model.add_quantum_error(depolarizing_error_CZ, ['cz'], ast.literal_eval(CZ_list[CZ_idx]), warnings=False)
+            simulator_noise_model.add_quantum_error(depolarizing_error_CZ, ['cz'], ast.literal_eval(CZ_list[CZ_idx])[::-1], warnings=False)
 
     return simulator_noise_model

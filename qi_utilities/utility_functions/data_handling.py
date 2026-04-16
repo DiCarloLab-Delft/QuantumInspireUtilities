@@ -30,6 +30,7 @@ class StoreProjectRecord:
 
     def __init__(self,
                  job: QIJob,
+                 directory: 'str' = None,
                  silent: bool = False,
                  store_circuit_figures: bool = True):
         """
@@ -44,11 +45,11 @@ class StoreProjectRecord:
                 Useful to set to False when the circuit is too large.
         """
 
-        self.create_project_directory(job)
+        self.create_project_directory(job, directory)
         self.obtain_backend_metadata(job)
         self.store_project_json()
         for job_idx in range(len(job.circuits_run_data)):
-            self.create_job_directory(job, job_idx)
+            self.create_job_directory(job, job_idx, directory)
             self.store_circuit_metadata(job, job_idx, store_circuit_figures)
             self.store_job_result(job, job_idx)
             if self.raw_data_memory == True:
@@ -58,7 +59,8 @@ class StoreProjectRecord:
             return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
 
     def create_project_directory(self,
-                                 job: QIJob):
+                                 job: QIJob,
+                                 directory: str = None):
         """
         This instance method creates a new project folder within the local user
         Documents / QuantumInspireProjects directory. If this directory does not
@@ -75,8 +77,12 @@ class StoreProjectRecord:
         self.job_0_timestamp = timestamp.strftime("%H%M%S")
 
         self.project_name = job.program_name
+        if directory is not None:
+            self.base_dir = Path(directory)
+        else:
+            self.base_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         self.project_dir = (
-            Path.home() / "Documents" / "QuantumInspireProjects" / self.date_timestamp
+            self.base_dir / self.date_timestamp
             / f"{self.job_0_timestamp}_{self.project_name}"
         )
         self.project_dir.mkdir(parents=True, exist_ok=True)
@@ -144,7 +150,8 @@ class StoreProjectRecord:
 
     def create_job_directory(self,
                              job: QIJob,
-                             job_idx: int):
+                             job_idx: int,
+                             directory: str = None):
         """
         This instance method creates new directories for each job contained
         within the project.
@@ -170,9 +177,12 @@ class StoreProjectRecord:
         self.job_timestamp = timestamp.strftime("%H%M%S")
         self.job_id = job.circuits_run_data[job_idx].results.job_id
 
+        if directory is not None:
+            self.base_dir = Path(directory)
+        else:
+            self.base_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         self.job_dir = (
-            Path.home()
-            / "Documents" / "QuantumInspireProjects" / self.date_timestamp
+            self.base_dir / self.date_timestamp
             / f"{self.job_0_timestamp}_{self.project_name}"
             / f"job_idx_{job_idx}__job_id_{self.job_id}"
         )
@@ -281,15 +291,16 @@ class StoreProjectRecord:
             f.write(cqasm_v3_program)
 
         if store_circuit_figures == True:
-            fig1 = self.qc.draw('mpl', scale=1.3)
-            fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
-                        x = 0.5, y = 0.99, fontsize=16)
-            fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
-            circuit_fig_path = (
-                Path(self.job_dir)
-                / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
-            )
-            fig1.savefig(circuit_fig_path)
+            if self.circuit_depth < 5000: # capped so that it doesn't take forever to store figures
+                fig1 = self.qc.draw('mpl', scale=1.3)
+                fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
+                            x = 0.5, y = 0.99, fontsize=16)
+                fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
+                circuit_fig_path = (
+                    Path(self.job_dir)
+                    / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
+                )
+                fig1.savefig(circuit_fig_path)
 
     def store_raw_data(self,
                        job: QIJob,
@@ -368,7 +379,8 @@ class RetrieveProjectRecord:
     """
 
     def __init__(self,
-                 job_id: str):
+                 job_id: str,
+                 directory: str = None):
         """
         Args:
             job_id (str):
@@ -376,9 +388,10 @@ class RetrieveProjectRecord:
         """
         
         self.job_id = job_id
-        project_dir = (
-            Path.home() / "Documents" / "QuantumInspireProjects"
-        )
+        if directory is not None:
+            project_dir = Path(directory)
+        else:
+            project_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         
         self.job_dir = None
         for job_dir_path in project_dir.rglob("*"):
