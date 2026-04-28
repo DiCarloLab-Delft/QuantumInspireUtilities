@@ -126,6 +126,10 @@ class NoisySimulator(AerSimulator):
             ideal_simulation (bool):
                 Boolean option for if the user prefers to use ideal simulation (True)
                 instead of a noisy one (False).
+
+            noise_applied (dict):
+                A dictionary in which individual noise models can be selected
+                to be applied. By default, all noise models are applied.
         """
         
         device_simulation_path = os.path.dirname(os.path.abspath(__file__))

@@ -56,6 +56,10 @@ def create_noise_model(processor_specs: dict,
         processor_specs (dict):
             The processor specs to be used for creating the noise model,
             as those are stored within the backend_parameters.json file.
+        
+        noise_applied (dict):
+            A dictionary in which individual noise models can be selected
+            to be applied. By default, all noise models are applied.
     """
     
     # For the numbers n_g and n_CZ defined below see M. A. Rol PhD thesis

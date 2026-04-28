@@ -14,22 +14,22 @@ from qiskit import QuantumCircuit
 from qiskit.result.result import Result
 from qiskit.quantum_info import SparsePauliOp
 
-def obtain_binary_list(nr_qubits: int):
+def obtain_binary_list(num_qubits: int):
     """
     This function returns an ordered list of binary numbers as a function
-    of nr_qubits.
+    of num_qubits.
 
-    e.g. for nr_qubits = 2, binary_list = ['00', '01', '10', '11']
+    e.g. for num_qubits = 2, binary_list = ['00', '01', '10', '11']
 
     Args:
-        nr_qubits (int):
+        num_qubits (int):
             The total number of qubits for which the binary list will be
             created for.
     """
 
     binary_list = []
-    for binary_str_idx in range(2**nr_qubits):
-        binary_list.append(np.binary_repr(binary_str_idx, nr_qubits))
+    for binary_str_idx in range(2**num_qubits):
+        binary_list.append(np.binary_repr(binary_str_idx, num_qubits))
     return binary_list
 
 def get_raw_data(qc: QuantumCircuit,
@@ -63,7 +63,7 @@ def get_raw_data(qc: QuantumCircuit,
     return raw_data
 
 def get_multi_counts(raw_data_shots: list,
-                     nr_qubits: int):
+                     num_qubits: int):
     """
     This function returns a list containing entries of all count dictionaries
     for each measurement block within one quantum circuit.
@@ -83,12 +83,12 @@ def get_multi_counts(raw_data_shots: list,
             is 'cK-1,cK-2,...,c2,c1,c0', meaning that the rightmost bit corresponds
             to the very first bit in the bit register.
 
-        nr_qubits (int):
+        num_qubits (int):
             The number of qubits of the original quantum circuit.
     """
 
-    binary_list = obtain_binary_list(nr_qubits)
-    mid_circuit_blocks_nr = int(len(raw_data_shots[0]) / nr_qubits)
+    binary_list = obtain_binary_list(num_qubits)
+    mid_circuit_blocks_nr = int(len(raw_data_shots[0]) / num_qubits)
 
     total_counts = []
     for mcm_block_idx in range(mid_circuit_blocks_nr):
@@ -100,10 +100,10 @@ def get_multi_counts(raw_data_shots: list,
         for shot_idx in range(len(raw_data_shots)):
             reversed_shots = raw_data_shots[shot_idx][::-1]
 
-            binary_string_reversed = reversed_shots[mcm_block_idx*nr_qubits:(mcm_block_idx+1)*nr_qubits]
-            # in order to ensure that len(binary_string) == nr_qubits,
+            binary_string_reversed = reversed_shots[mcm_block_idx*num_qubits:(mcm_block_idx+1)*num_qubits]
+            # in order to ensure that len(binary_string) == num_qubits,
             binary_string = binary_string_reversed[::-1]
-            binary_string = np.binary_repr(int(binary_string, 2), nr_qubits)
+            binary_string = np.binary_repr(int(binary_string, 2), num_qubits)
             counts_dict[binary_string] += 1
 
         total_counts.append(counts_dict)
@@ -124,15 +124,15 @@ def get_multi_probs(raw_data_counts: list[dict]):
             last measurement block.
     """
 
-    nr_shots = 0
+    num_shots = 0
     for entry in raw_data_counts[0]:
-        nr_shots += raw_data_counts[0][entry]
+        num_shots += raw_data_counts[0][entry]
 
     probabilities = []
     for entry_idx in range(len(raw_data_counts)):
         prob_dict = {}
         for entry in raw_data_counts[entry_idx]:
-            prob_dict[entry] = raw_data_counts[entry_idx][entry] / nr_shots
+            prob_dict[entry] = raw_data_counts[entry_idx][entry] / num_shots
         probabilities.append(prob_dict)
 
     return probabilities
@@ -168,8 +168,8 @@ def observable_expectation_values_Z_basis(probabilities: list[dict],
     if 'X' in observable or 'Y' in observable:
         raise ValueError(f"Observable {observable} must not contain Paulis X or Y.")
     
-    nr_qubits = len(observable)
-    binary_list = obtain_binary_list(nr_qubits)
+    num_qubits = len(observable)
+    binary_list = obtain_binary_list(num_qubits)
 
     observable_values = []
     observable_matrix = np.real(SparsePauliOp([observable]).to_matrix())

@@ -14,9 +14,11 @@ import matplotlib.patheffects as path_effects
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from qiskit import QuantumCircuit, transpile
 from qiskit.result.result import Result
+from qiskit_quantuminspire.qi_backend import QIBackend
 from qi_utilities.utility_functions.circuit_modifiers import apply_readout_circuit
 from qi_utilities.utility_functions.raw_data_processing import obtain_binary_list, get_multi_counts
 from qi_utilities.utility_functions.data_handling import StoreProjectRecord
+from qi_utilities.device_simulation.simulators import NoisySimulator
 
 def split_raw_shots(result: Result,
                     qubit_list: list,
@@ -42,15 +44,15 @@ def split_raw_shots(result: Result,
             Defaults to None for a job with a single quantum circuit.
     """
 
-    nr_qubits = len(qubit_list)
+    num_qubits = len(qubit_list)
     raw_shots = result.get_memory(circuit_nr)
 
     experiment_shots = []
     ro_mitigation_shots = []
 
     for raw_shots_entry in range(len(raw_shots)):
-        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:nr_qubits*2**nr_qubits])
-        experiment_shots.append(raw_shots[raw_shots_entry][nr_qubits*2**nr_qubits::])
+        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:num_qubits*2**num_qubits])
+        experiment_shots.append(raw_shots[raw_shots_entry][num_qubits*2**num_qubits::])
     return experiment_shots, ro_mitigation_shots
 
 def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
@@ -76,8 +78,8 @@ def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
             e.g. for qubits q0 and q2, qubit_list = [0, 2].
     """
 
-    nr_qubits = len(qubit_list)
-    binary_list = obtain_binary_list(nr_qubits)
+    num_qubits = len(qubit_list)
+    binary_list = obtain_binary_list(num_qubits)
     
     raw_data_probs_ro_corrected = []
 
@@ -107,16 +109,32 @@ def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
         raw_data_probs_ro_corrected.append(probs_ro_corrected_dict)
     return raw_data_probs_ro_corrected
 
-def measure_ro_assignment_matrix(backend,
-                                 qubit_list,
-                                 nr_shots: int = 2**12):
+def measure_ro_assignment_matrix(backend: QIBackend | NoisySimulator,
+                                 qubit_list: list,
+                                 num_shots: int = 2**12):
+    """
+    This function can be used to measure the readout (ro) assignment
+    matrix for an input list of qubits.
+
+    Args:
+        backend (QIBackend | NoisySimulator):
+            The hardware or simulator backend.
+
+        qubit_list (list):
+            An ordered list containing the integer indices of the qubits
+            used in the original quantum circuit.
+            e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+        num_shots (int):
+            The number of shots used to measure the ro assignment matrix.
+    """
     
-    nr_qubits = len(qubit_list)
-    qc = QuantumCircuit(nr_qubits,
-                        name=f"Readout_Assignment_Matrix_{nr_qubits}_Qubits")
-    qc = apply_readout_circuit(qc, [idx for idx in range(nr_qubits)])
+    num_qubits = len(qubit_list)
+    qc = QuantumCircuit(num_qubits,
+                        name=f"Readout_Assignment_Matrix_{num_qubits}_Qubits")
+    qc = apply_readout_circuit(qc, [idx for idx in range(num_qubits)])
     qc_transpiled = transpile(qc, backend, initial_layout=qubit_list)
-    job = backend.run(qc_transpiled, shots=nr_shots, memory = True)
+    job = backend.run(qc_transpiled, shots=num_shots, memory = True)
     try:
         result = job.result(timeout = 10 * 6 * 600)
     except Exception as error_message:
@@ -155,10 +173,10 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
             e.g. for qubits q0 and q2, qubit_list = [0, 2].
     """
 
-    nr_qubits = len(qubit_list)
-    prepared_states = obtain_binary_list(nr_qubits)
+    num_qubits = len(qubit_list)
+    prepared_states = obtain_binary_list(num_qubits)
     
-    ro_counts_per_prepared_states = get_multi_counts(ro_mitigation_shots, nr_qubits)
+    ro_counts_per_prepared_states = get_multi_counts(ro_mitigation_shots, num_qubits)
     assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float64)
     for prepared_state_idx in range(len(prepared_states)):
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
@@ -201,10 +219,10 @@ def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
         colors = np.vstack((reds, middle, greens))
         return LinearSegmentedColormap.from_list("RedWhiteGreen", colors)
 
-    nr_qubits = len(qubit_list)
+    num_qubits = len(qubit_list)
     binary_labels = []
-    for binary_str_idx in range(2**nr_qubits):
-        binary_labels.append(r"$|$" + f"{np.binary_repr(binary_str_idx, nr_qubits)}" + r"$\rangle$")
+    for binary_str_idx in range(2**num_qubits):
+        binary_labels.append(r"$|$" + f"{np.binary_repr(binary_str_idx, num_qubits)}" + r"$\rangle$")
 
     fig_size = max(6, len(binary_labels) * 0.4)
     fig, ax = plt.subplots(figsize=(fig_size, fig_size), dpi=300)

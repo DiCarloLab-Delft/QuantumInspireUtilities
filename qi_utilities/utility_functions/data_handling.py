@@ -39,6 +39,11 @@ class StoreProjectRecord:
                 The user already-submitted job object, more correctly referred to as
                 'project'. A project can contain multiple jobs, but for simplification,
                 and also for legacy reasons, we keep referring to it as the 'job'.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
                 
             store_circuit_figures (bool):
                 A user-configurable flag for storing locally the circuit PNG file.
@@ -69,6 +74,11 @@ class StoreProjectRecord:
         Args:
             job (QIJob):
                 The user already-submitted job (project) object.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
 
         timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished, not when created
@@ -99,7 +109,7 @@ class StoreProjectRecord:
         """
 
         self.backend_name = job.backend().name
-        self.backend_nr_qubits = job.backend().num_qubits
+        self.backend_num_qubits = job.backend().num_qubits
         self.backend_operations = []
         for entry in range(len(job.backend().operations)):
             self.backend_operations.append(str(job.backend().operations[entry]))
@@ -137,7 +147,7 @@ class StoreProjectRecord:
         general_dict['Project name'] = self.project_name
         general_dict['Project timestamp'] = f"{self.date_timestamp}_{self.job_0_timestamp}"
         general_dict['Backend name'] = self.backend_name
-        general_dict['Backend number of qubits'] = self.backend_nr_qubits
+        general_dict['Backend number of qubits'] = self.backend_num_qubits
         general_dict['Backend operations set'] = self.backend_operations
         general_dict['Backend maximum allowed shots'] = self.backend_max_shots
 
@@ -169,6 +179,11 @@ class StoreProjectRecord:
                 Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         
         timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished, not when created
@@ -291,7 +306,7 @@ class StoreProjectRecord:
             f.write(cqasm_v3_program)
 
         if store_circuit_figures == True:
-            if self.circuit_depth < 5000: # capped so that it doesn't take forever to store figures
+            if self.circuit_depth < 5000: # capped so that it doesn't take forever to store large figures
                 fig1 = self.qc.draw('mpl', scale=1.3)
                 fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
                             x = 0.5, y = 0.99, fontsize=16)
@@ -385,6 +400,11 @@ class RetrieveProjectRecord:
         Args:
             job_id (str):
                 The Job ID, as this appears also in the Quantum Inspire platform.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         
         self.job_id = job_id
@@ -434,27 +454,27 @@ class RetrieveProjectRecord:
         return counts
 
     def get_memory(self,
-                   dummy_circuit_nr: int = None):
+                   dummy_circuit_num: int = None):
         """
         This instance method retrieves the job raw data in a list of string
         bitstrings format.
 
         For jobs were the variable 'memory' was set to False,
-        e.g. job = backend.run(qc, shots=nr_shots, memory = False)
+        e.g. job = backend.run(qc, shots=num_shots, memory = False)
         this instance method will return an empty list.
 
         Args:
-            dummy_circuit_nr (int):
+            dummy_circuit_num (int):
                 This is a dummy variable which does not affect the instance method.
                 It exists so that the instance method mimics result = job.result().get_memory(),
-                which does have the 'circuit_nr' as an input.
-                In result = job.result().get_memory(circuit_nr), since the job object in
+                which does have the 'circuit_num' as an input.
+                In result = job.result().get_memory(circuit_num), since the job object in
                 reality is a project and can in principle contain multiple jobs, the variable
-                circuit_nr is used to identify uniquely a single circuit tied to a single job.
+                circuit_num is used to identify uniquely a single circuit tied to a single job.
                 
                 Since when instantiating the RetrieveProjectRecord class we have already
-                identified a single job, the circuit_nr would have no meaning.
-                Still, we use here a dummy circuit_nr variable for compatibility purposes with
+                identified a single job, the circuit_num would have no meaning.
+                Still, we use here a dummy circuit_num variable for compatibility purposes with
                 respect to other functions used in other modules.
         """
 
