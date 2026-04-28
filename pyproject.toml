@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qi-utilities"
-version = "0.2.3"
+version = "0.2.4"
 description = "Package library with utility functions and demonstration notebooks especially suited for the superconducting hardware backends of the cloud quantum computing platform Quantum Inspire."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -49,6 +49,12 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/DiCarloLab-Delft/QuantumInspireUtilities"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["qi_utilities*"]
+
+[tool.setuptools.package-data]
+qi_utilities = ["**/*.json"]
