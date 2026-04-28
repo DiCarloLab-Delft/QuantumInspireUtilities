@@ -126,18 +126,18 @@ def construct_trotterization_circuit(initial_state: str,
             functionality when constructing the Trotterization algorithm.
     """
 
-    nr_qubits = len(initial_state)
+    num_qubits = len(initial_state)
     if midcircuit_measurement == True:
-        qc = QuantumCircuit(nr_qubits, nr_qubits*len(evolution_times))
+        qc = QuantumCircuit(num_qubits, num_qubits*len(evolution_times))
     else:
-        qc = QuantumCircuit(nr_qubits, nr_qubits)
-    for idx in range(nr_qubits):
+        qc = QuantumCircuit(num_qubits, num_qubits)
+    for idx in range(num_qubits):
         qc.reset(idx)
     qc.barrier()
 
     for idx in range(len(initial_state)):
         if initial_state[idx] == '1':
-            qc.x((nr_qubits-1) - idx)
+            qc.x((num_qubits-1) - idx)
     qc.barrier()
 
     for repetition in range(1, trotter_order+1):
@@ -145,7 +145,7 @@ def construct_trotterization_circuit(initial_state: str,
     qc.barrier()
 
     if midcircuit_measurement == True:
-        apply_pre_measurement_rotations(qc, measured_observable, [nr_qubits*time_step, nr_qubits*time_step + 1])
+        apply_pre_measurement_rotations(qc, measured_observable, [num_qubits*time_step, num_qubits*time_step + 1])
     else:
         apply_pre_measurement_rotations(qc, measured_observable)
     qc.barrier()

@@ -30,6 +30,7 @@ class StoreProjectRecord:
 
     def __init__(self,
                  job: QIJob,
+                 directory: 'str' = None,
                  silent: bool = False,
                  store_circuit_figures: bool = True):
         """
@@ -38,17 +39,22 @@ class StoreProjectRecord:
                 The user already-submitted job object, more correctly referred to as
                 'project'. A project can contain multiple jobs, but for simplification,
                 and also for legacy reasons, we keep referring to it as the 'job'.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
                 
             store_circuit_figures (bool):
                 A user-configurable flag for storing locally the circuit PNG file.
                 Useful to set to False when the circuit is too large.
         """
 
-        self.create_project_directory(job)
+        self.create_project_directory(job, directory)
         self.obtain_backend_metadata(job)
         self.store_project_json()
         for job_idx in range(len(job.circuits_run_data)):
-            self.create_job_directory(job, job_idx)
+            self.create_job_directory(job, job_idx, directory)
             self.store_circuit_metadata(job, job_idx, store_circuit_figures)
             self.store_job_result(job, job_idx)
             if self.raw_data_memory == True:
@@ -58,7 +64,8 @@ class StoreProjectRecord:
             return print(f"Successfully stored project record in the following directory:\n{str(self.project_dir)}\n")
 
     def create_project_directory(self,
-                                 job: QIJob):
+                                 job: QIJob,
+                                 directory: str = None):
         """
         This instance method creates a new project folder within the local user
         Documents / QuantumInspireProjects directory. If this directory does not
@@ -67,6 +74,11 @@ class StoreProjectRecord:
         Args:
             job (QIJob):
                 The user already-submitted job (project) object.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
 
         timestamp_utc = job.circuits_run_data[0].results.created_on # actually when the job finished, not when created
@@ -75,8 +87,12 @@ class StoreProjectRecord:
         self.job_0_timestamp = timestamp.strftime("%H%M%S")
 
         self.project_name = job.program_name
+        if directory is not None:
+            self.base_dir = Path(directory)
+        else:
+            self.base_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         self.project_dir = (
-            Path.home() / "Documents" / "QuantumInspireProjects" / self.date_timestamp
+            self.base_dir / self.date_timestamp
             / f"{self.job_0_timestamp}_{self.project_name}"
         )
         self.project_dir.mkdir(parents=True, exist_ok=True)
@@ -93,7 +109,7 @@ class StoreProjectRecord:
         """
 
         self.backend_name = job.backend().name
-        self.backend_nr_qubits = job.backend().num_qubits
+        self.backend_num_qubits = job.backend().num_qubits
         self.backend_operations = []
         for entry in range(len(job.backend().operations)):
             self.backend_operations.append(str(job.backend().operations[entry]))
@@ -131,7 +147,7 @@ class StoreProjectRecord:
         general_dict['Project name'] = self.project_name
         general_dict['Project timestamp'] = f"{self.date_timestamp}_{self.job_0_timestamp}"
         general_dict['Backend name'] = self.backend_name
-        general_dict['Backend number of qubits'] = self.backend_nr_qubits
+        general_dict['Backend number of qubits'] = self.backend_num_qubits
         general_dict['Backend operations set'] = self.backend_operations
         general_dict['Backend maximum allowed shots'] = self.backend_max_shots
 
@@ -144,7 +160,8 @@ class StoreProjectRecord:
 
     def create_job_directory(self,
                              job: QIJob,
-                             job_idx: int):
+                             job_idx: int,
+                             directory: str = None):
         """
         This instance method creates new directories for each job contained
         within the project.
@@ -162,6 +179,11 @@ class StoreProjectRecord:
                 Therefore, job_idx is being utilized for clarity when storing
                 the data, so that it follows the sequence with which the jobs were
                 created.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         
         timestamp_utc = job.circuits_run_data[job_idx].results.created_on # actually when the job finished, not when created
@@ -170,9 +192,12 @@ class StoreProjectRecord:
         self.job_timestamp = timestamp.strftime("%H%M%S")
         self.job_id = job.circuits_run_data[job_idx].results.job_id
 
+        if directory is not None:
+            self.base_dir = Path(directory)
+        else:
+            self.base_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         self.job_dir = (
-            Path.home()
-            / "Documents" / "QuantumInspireProjects" / self.date_timestamp
+            self.base_dir / self.date_timestamp
             / f"{self.job_0_timestamp}_{self.project_name}"
             / f"job_idx_{job_idx}__job_id_{self.job_id}"
         )
@@ -281,15 +306,16 @@ class StoreProjectRecord:
             f.write(cqasm_v3_program)
 
         if store_circuit_figures == True:
-            fig1 = self.qc.draw('mpl', scale=1.3)
-            fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
-                        x = 0.5, y = 0.99, fontsize=16)
-            fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
-            circuit_fig_path = (
-                Path(self.job_dir)
-                / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
-            )
-            fig1.savefig(circuit_fig_path)
+            if self.circuit_depth < 5000: # capped so that it doesn't take forever to store large figures
+                fig1 = self.qc.draw('mpl', scale=1.3)
+                fig1.suptitle(f'\n{self.date_timestamp}_{self.job_timestamp}\nTranspiled quantum circuit\nCircuit name: {self.circuit_name}\nJob ID: {self.job_id}\n',
+                            x = 0.5, y = 0.99, fontsize=16)
+                fig1.supxlabel(f'Circuit depth: {self.circuit_depth}', x = 0.5, y = 0.06, fontsize=18)
+                circuit_fig_path = (
+                    Path(self.job_dir)
+                    / f"quantum_circuit_{self.date_timestamp}_{self.job_timestamp}.png"
+                )
+                fig1.savefig(circuit_fig_path)
 
     def store_raw_data(self,
                        job: QIJob,
@@ -368,17 +394,24 @@ class RetrieveProjectRecord:
     """
 
     def __init__(self,
-                 job_id: str):
+                 job_id: str,
+                 directory: str = None):
         """
         Args:
             job_id (str):
                 The Job ID, as this appears also in the Quantum Inspire platform.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         
         self.job_id = job_id
-        project_dir = (
-            Path.home() / "Documents" / "QuantumInspireProjects"
-        )
+        if directory is not None:
+            project_dir = Path(directory)
+        else:
+            project_dir = Path.home() / "Documents" / "QuantumInspireProjects"
         
         self.job_dir = None
         for job_dir_path in project_dir.rglob("*"):
@@ -421,27 +454,27 @@ class RetrieveProjectRecord:
         return counts
 
     def get_memory(self,
-                   dummy_circuit_nr: int = None):
+                   dummy_circuit_num: int = None):
         """
         This instance method retrieves the job raw data in a list of string
         bitstrings format.
 
         For jobs were the variable 'memory' was set to False,
-        e.g. job = backend.run(qc, shots=nr_shots, memory = False)
+        e.g. job = backend.run(qc, shots=num_shots, memory = False)
         this instance method will return an empty list.
 
         Args:
-            dummy_circuit_nr (int):
+            dummy_circuit_num (int):
                 This is a dummy variable which does not affect the instance method.
                 It exists so that the instance method mimics result = job.result().get_memory(),
-                which does have the 'circuit_nr' as an input.
-                In result = job.result().get_memory(circuit_nr), since the job object in
+                which does have the 'circuit_num' as an input.
+                In result = job.result().get_memory(circuit_num), since the job object in
                 reality is a project and can in principle contain multiple jobs, the variable
-                circuit_nr is used to identify uniquely a single circuit tied to a single job.
+                circuit_num is used to identify uniquely a single circuit tied to a single job.
                 
                 Since when instantiating the RetrieveProjectRecord class we have already
-                identified a single job, the circuit_nr would have no meaning.
-                Still, we use here a dummy circuit_nr variable for compatibility purposes with
+                identified a single job, the circuit_num would have no meaning.
+                Still, we use here a dummy circuit_num variable for compatibility purposes with
                 respect to other functions used in other modules.
         """
 

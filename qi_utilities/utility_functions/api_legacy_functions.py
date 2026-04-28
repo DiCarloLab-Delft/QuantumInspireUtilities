@@ -141,8 +141,8 @@ def api_run_and_save(param,
             for i in range(additional_len):
                 raw_data[entry] = '0' + raw_data[entry]
 
-        for nr_shots in range(len(raw_data)):
-            raw_data[nr_shots] = 'd'+str(raw_data[nr_shots])
+        for num_shots in range(len(raw_data)):
+            raw_data[num_shots] = 'd'+str(raw_data[num_shots])
 
         df = pd.DataFrame({ 
                                 "Raw data values": raw_data
