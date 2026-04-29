@@ -4,8 +4,126 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from pathlib import Path
 from qiskit import QuantumCircuit
-from qi_utilities.measurements.fitting_functions import exp_decay_func
+from qi_utilities.measurements.fitting_functions import exp_decay_func, cos_func
 from qi_utilities.measurements.base_classes import BaseMeasurement
+
+
+class RabiMeasurement(BaseMeasurement):
+
+    def __init__(self,
+                 backend,
+                 qubit_list: list,
+                 num_shots: int,
+                 rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29),
+                 directory: str = None):
+        """
+        Args:
+            rotation_angles (np.array):
+                The different rotation angles for the Rabi oscillation
+                expressed in radians [rad].
+            
+        """
+        
+        if len(rotation_angles) < 4:
+            raise ValueError("rotation_angles must have at least 4 entries!")
+        
+        qc = self._quantum_circuit(backend,
+                                   qubit_list,
+                                   rotation_angles)
+        
+        super().__init__(backend,
+                         qubit_list,
+                         qc,
+                         num_shots,
+                         directory)
+        
+        self._data_analysis(rotation_angles)
+        
+    def _quantum_circuit(self,
+                        backend,
+                        qubit_list: list,
+                        rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29)):
+
+        bit_idx = 0
+        self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
+        qc = QuantumCircuit(backend.num_qubits,
+                            len(rotation_angles)*len(qubit_list),
+                            name=f'Rabi_{self.qubit_labels}')
+
+        for step_idx in range(len(rotation_angles)):
+            for qubit_idx in qubit_list:
+                qc.reset(qubit_idx)
+            qc.barrier()
+
+            for qubit_idx in qubit_list:
+                qc.rx(rotation_angles[step_idx], qubit_idx)
+            qc.barrier()
+
+            for qubit_idx in qubit_list:
+                qc.measure(qubit = qubit_idx, cbit = bit_idx)
+                bit_idx += 1
+            qc.barrier()
+            
+        return qc
+    
+    def _data_analysis(self,
+                       rotation_angles: np.array):
+        
+        fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
+        for qubit_idx in range(len(self.qubit_list)):
+            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+                                     for entry in range(len(rotation_angles))]
+            params, covariance = curve_fit(cos_func,
+                                           rotation_angles,
+                                           probabilities_excited)
+            a_fit, b_fit, c_fit, d_fit = params
+            cosine_fit = cos_func(rotation_angles, a_fit, b_fit, c_fit, d_fit)
+
+            ax.scatter(rotation_angles,
+                       probabilities_excited,
+                       label=f'Q{qubit_idx}',
+                       alpha=0.6,
+                       color = f'C{qubit_idx}')
+            ax.plot(rotation_angles,
+                    cosine_fit,
+                    alpha=0.6,
+                    color = f'C{qubit_idx}')
+        ax.set_xlabel('Applied rotation')
+        ax.set_ylabel(r'$P(|1\rangle)$')
+        ax.set_title(f'Rabi oscillation\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+        
+        labels = []
+        for step_idx in range(len(rotation_angles)):
+            angle_in_degrees = (360 / (2 * np.pi)) * rotation_angles[step_idx]
+            step_label = f"rx{round(angle_in_degrees)}"
+            labels.append(step_label)
+        label_locs = rotation_angles
+        ax.set_xticks(label_locs)
+        ax.set_xticklabels(labels, rotation=65)
+        ax.set_ylim(-0.05, 1.05)
+        ax.legend()
+        ax.grid()
+        rabi_fig_path = (
+            Path(self.record.project_dir)
+            / f"rabi_plots_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+        )
+        fig.savefig(rabi_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+        self.experiment_data = {}
+        self.experiment_data["Experiment name"] = self.record.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Rotation angles [rad]"] = rotation_angles
+        self.experiment_data["Processed data"] = {f"Q{self.qubit_list[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+                                                 for qubit_idx in range(len(self.qubit_list))}
+        json_file_path = (
+            Path(self.record.project_dir)
+            / f"rabi_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+        )
+        with open(json_file_path, 'w') as file:
+            json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+
 
 class T1_Measurement(BaseMeasurement):
 
@@ -128,6 +246,9 @@ class T1_Measurement(BaseMeasurement):
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+
+
+
 
 
 

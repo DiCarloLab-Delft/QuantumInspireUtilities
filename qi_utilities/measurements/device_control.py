@@ -20,3 +20,12 @@ class DeviceControl:
                                  num_shots=self.num_shots)
         self.T1_values = T1_meas.T1_values
         print(self.T1_values)
+
+    def measure_rabi(self,
+                     qubit_list: list,
+                     rotation_angles = np.linspace(0, 2*np.pi, num=29)):
+        
+        rabi_meas = RabiMeasurement(backend=self.backend,
+                                    qubit_list=qubit_list,
+                                    rotation_angles=rotation_angles,
+                                    num_shots=self.num_shots)
