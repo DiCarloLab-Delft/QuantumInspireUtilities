@@ -7,7 +7,8 @@ class DeviceControl:
                  backend):
         self.backend = backend
         self.num_shots = 2**12
-
+        self.latest_qc = None
+        
         self.T1_values = None
 
     def measure_T1(self,
@@ -18,6 +19,7 @@ class DeviceControl:
                                  qubit_list=qubit_list,
                                  measurement_times=measurement_times,
                                  num_shots=self.num_shots)
+        self.latest_qc = T1_meas.qc
         self.T1_values = T1_meas.T1_values
         print(self.T1_values)
 
@@ -29,3 +31,4 @@ class DeviceControl:
                                     qubit_list=qubit_list,
                                     rotation_angles=rotation_angles,
                                     num_shots=self.num_shots)
+        self.latest_qc = rabi_meas.qc
