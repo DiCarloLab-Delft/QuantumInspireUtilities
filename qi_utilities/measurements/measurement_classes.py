@@ -81,7 +81,7 @@ class RabiMeasurement(BaseMeasurement):
 
             ax.scatter(rotation_angles,
                        probabilities_excited,
-                       label=f'Q{qubit_idx}',
+                       label=f'{self.qubit_labels[qubit_idx]}',
                        alpha=0.6,
                        color = f'C{qubit_idx}')
             ax.plot(rotation_angles,
@@ -115,7 +115,7 @@ class RabiMeasurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Rotation angles [rad]"] = rotation_angles
-        self.experiment_data["Processed data"] = {f"Q{self.qubit_list[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         json_file_path = (
             Path(self.record.project_dir)
@@ -209,11 +209,11 @@ class T1_Measurement(BaseMeasurement):
                                            )
             tau_fit, amplitude_fit = params
             exponential_fit = exp_decay_func(measurement_times, tau_fit, amplitude_fit)
-            self.T1_values[f'Q{qubit_idx} [us]'] = 1e6 * tau_fit
+            self.T1_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
 
             ax.scatter(1e6*measurement_times,
                        probabilities_excited,
-                       label=f'Q{qubit_idx}: T1 = {1e6 * tau_fit:.1f} μs',
+                       label=f'{self.qubit_labels[qubit_idx]}: T1 = {1e6 * tau_fit:.1f} μs',
                        alpha=0.6,
                        color = f'C{qubit_idx}')
             ax.plot(1e6*measurement_times,
@@ -237,7 +237,7 @@ class T1_Measurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
-        self.experiment_data["Processed data"] = {f"Q{self.qubit_list[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T1 values"] = self.T1_values
         json_file_path = (
