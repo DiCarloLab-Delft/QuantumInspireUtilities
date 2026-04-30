@@ -83,7 +83,7 @@ class RabiMeasurement(BaseMeasurement):
             for ax_obj in [ax_all, ax]:
                 ax_obj.scatter(rotation_angles,
                         probabilities_excited,
-                        label=f'{self.qubit_labels[qubit_idx]}',
+                        label=f'Qubit {self.qubit_labels[qubit_idx]}',
                         alpha=0.6,
                         color = f'C{qubit_idx}')
                 ax_obj.plot(rotation_angles,
@@ -596,6 +596,153 @@ class T2_EchoMeasurement(BaseMeasurement):
         json_file_path = (
             Path(self.record.project_dir)
             / f"T2_echo_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+        )
+        with open(json_file_path, 'w') as file:
+            json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+
+
+class AllXYMeasurement(BaseMeasurement):
+
+    def __init__(self,
+                 backend,
+                 qubit_list: list,
+                 num_shots: int,
+                 directory: str = None):
+        
+        qc = self._quantum_circuit(backend,
+                                   qubit_list)
+        
+        super().__init__(backend,
+                         qubit_list,
+                         qc,
+                         num_shots,
+                         directory)
+        
+        self._data_analysis()
+        
+    def _quantum_circuit(self,
+                         backend,
+                         qubit_list):
+
+        AllXY_syndromes = [['i', 'i'], ['rx180', 'rx180'], ['ry180', 'ry180'],
+                            ['rx180', 'ry180'], ['ry180', 'rx180'],
+                            ['rx90', 'i'], ['ry90', 'i'], ['rx90', 'ry90'],
+                            ['ry90', 'rx90'], ['rx90', 'ry180'], ['ry90', 'rx180'],
+                            ['rx180', 'ry90'], ['ry180', 'rx90'], ['rx90', 'rx180'],
+                            ['rx180', 'rx90'], ['ry90', 'ry180'], ['ry180', 'ry90'],
+                            ['rx180', 'i'], ['ry180', 'i'], ['rx90', 'rx90'],
+                            ['ry90', 'ry90']]
+
+
+        repetitions=2
+        bit_idx = 0
+        self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
+        qc = QuantumCircuit(backend.num_qubits,
+                            repetitions*len(AllXY_syndromes)*len(qubit_list),
+                            name=f'AllXY_{self.qubit_labels}')
+
+        for syndrome_idx, syndrome in enumerate(AllXY_syndromes):
+            for repetition_idx in range(repetitions):
+                for qubit_idx in qubit_list:
+                    qc.reset(qubit_idx)
+                qc.barrier()
+                for qubit_idx in qubit_list:
+                    for pulse_idx in range(len(syndrome)):
+                        if '90' in syndrome[pulse_idx]:
+                            rotation_angle = np.pi/2
+                        if '180' in syndrome[pulse_idx]:
+                            rotation_angle = np.pi
+                        if 'i' in syndrome[pulse_idx]:
+                            qc.id(qubit_idx)
+                            continue
+                        if 'rx' in syndrome[pulse_idx]:
+                            qc.rx(rotation_angle, qubit_idx)
+                            continue
+                        if 'ry' in syndrome[pulse_idx]:
+                            qc.ry(rotation_angle, qubit_idx)
+                            continue
+                qc.barrier()
+
+                for qubit_idx in qubit_list:
+                    qc.measure(qubit = qubit_idx, cbit = bit_idx)
+                    bit_idx += 1
+                qc.barrier()
+
+        return qc
+    
+    def _data_analysis(self):
+        
+        AllXY_syndrome_labels = ['II', 'XX', 'YY', 'XY', 'YX', 'xI', 'yI', 'xy',
+                                 'yx', 'xY', 'yX', 'Xy', 'Yx', 'xX', 'Xx', 'yY',
+                                 'Yy', 'XI', 'YI', 'xx', 'yy']
+        self.allxy_deviations = {}
+
+        fig_all, ax_all = plt.subplots(dpi=300)
+        for qubit_idx in range(len(self.qubit_list)):
+            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+                                     for entry in range(2*len(AllXY_syndrome_labels))]
+            
+            ideal_data = np.concatenate((0 * np.ones(10), 0.5 * np.ones(24),
+                            np.ones(8)))
+            data_error = probabilities_excited - ideal_data
+            deviation_total = np.mean(abs(data_error))
+            self.allxy_deviations[f'{self.qubit_labels[qubit_idx]} deviation'] = deviation_total
+
+            fig, ax = plt.subplots(dpi=300)
+            for ax_obj in [ax_all, ax]:
+                ax_obj.plot(np.arange(start=0,
+                                      stop=2*len(AllXY_syndrome_labels),
+                                      step=1),
+                        probabilities_excited,
+                        label=f'Qubit {self.qubit_labels[qubit_idx]}',
+                        alpha=0.6,
+                        color = f'C{qubit_idx}',
+                        linestyle='-', marker='o')
+                ax_obj.set_xlabel('Syndrome')
+                ax_obj.set_ylabel(r'Population $|1\rangle$')
+                ax_obj.set_title(f'AllXY measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+        
+                labels = []
+                for label_idx in range(len(AllXY_syndrome_labels)):
+                    labels.append(AllXY_syndrome_labels[label_idx])
+                label_locs = np.arange(start=1,
+                                       stop=2*len(AllXY_syndrome_labels),
+                                       step=2)
+                ax_obj.set_xticks(label_locs)
+                ax_obj.set_xticklabels(labels, rotation=65)
+                ax_obj.set_ylim(-0.05, 1.05)
+            ax.plot(np.arange(start=0,
+                              stop=2*len(AllXY_syndrome_labels),
+                              step=1),
+                    ideal_data,
+                    label=f'Ideal | Deviation: {deviation_total:.5f}',
+                    alpha=0.6,
+                    color = 'red')
+            ax.legend()
+            allxy_fig_path = (
+                Path(self.record.project_dir)
+                / f"allxy_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(allxy_fig_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        ax_all.legend()
+        allxy_all_fig_path = (
+            Path(self.record.project_dir)
+            / f"allxy_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+        )
+        fig_all.savefig(allxy_all_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_all)
+
+        self.experiment_data = {}
+        self.experiment_data["Experiment name"] = self.record.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+                                                 for qubit_idx in range(len(self.qubit_list))}
+        self.experiment_data["AllXY deviations"] = self.allxy_deviations
+        json_file_path = (
+            Path(self.record.project_dir)
+            / f"allxy_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)

@@ -44,7 +44,8 @@ class BaseMeasurement:
                                   self.backend,
                                   layout_method = "trivial",
                                   routing_method = "none",
-                                  basis_gates=tuna_backends_basis_gates)
+                                  basis_gates=tuna_backends_basis_gates,
+                                  optimization_level=0) # specific (and necessary) for the benchmark routines
 
         job = self.backend.run(qc_transpiled,
                           shots=self.num_shots,
