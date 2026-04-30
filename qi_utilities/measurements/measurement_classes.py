@@ -69,7 +69,7 @@ class RabiMeasurement(BaseMeasurement):
     def _data_analysis(self,
                        rotation_angles: np.array):
         
-        fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
+        fig_all, ax_all = plt.subplots(figsize=(18, 5), dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
             probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
                                      for entry in range(len(rotation_angles))]
@@ -79,36 +79,44 @@ class RabiMeasurement(BaseMeasurement):
             a_fit, b_fit, c_fit, d_fit = params
             cosine_fit = cos_func(rotation_angles, a_fit, b_fit, c_fit, d_fit)
 
-            ax.scatter(rotation_angles,
-                       probabilities_excited,
-                       label=f'{self.qubit_labels[qubit_idx]}',
-                       alpha=0.6,
-                       color = f'C{qubit_idx}')
-            ax.plot(rotation_angles,
-                    cosine_fit,
-                    alpha=0.6,
-                    color = f'C{qubit_idx}')
-        ax.set_xlabel('Applied rotation')
-        ax.set_ylabel(r'$P(|1\rangle)$')
-        ax.set_title(f'Rabi oscillation\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+            fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
+            for ax_obj in [ax_all, ax]:
+                ax_obj.scatter(rotation_angles,
+                        probabilities_excited,
+                        label=f'{self.qubit_labels[qubit_idx]}',
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.plot(rotation_angles,
+                        cosine_fit,
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.set_xlabel('Applied rotation')
+                ax_obj.set_ylabel(r'$P(|1\rangle)$')
+                ax_obj.set_title(f'Rabi oscillation\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
         
-        labels = []
-        for step_idx in range(len(rotation_angles)):
-            angle_in_degrees = (360 / (2 * np.pi)) * rotation_angles[step_idx]
-            step_label = f"rx{round(angle_in_degrees)}"
-            labels.append(step_label)
-        label_locs = rotation_angles
-        ax.set_xticks(label_locs)
-        ax.set_xticklabels(labels, rotation=65)
-        ax.set_ylim(-0.05, 1.05)
-        ax.legend()
-        ax.grid()
-        rabi_fig_path = (
+                labels = []
+                for step_idx in range(len(rotation_angles)):
+                    angle_in_degrees = (360 / (2 * np.pi)) * rotation_angles[step_idx]
+                    step_label = f"rx{round(angle_in_degrees)}"
+                    labels.append(step_label)
+                label_locs = rotation_angles
+                ax_obj.set_xticks(label_locs)
+                ax_obj.set_xticklabels(labels, rotation=65)
+                ax_obj.set_ylim(-0.05, 1.05)
+                ax_obj.legend()
+                ax_obj.grid(True)
+            rabi_fig_path = (
+                Path(self.record.project_dir)
+                / f"rabi_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(rabi_fig_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        rabi_all_fig_path = (
             Path(self.record.project_dir)
-            / f"rabi_plots_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            / f"rabi_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
         )
-        fig.savefig(rabi_fig_path, dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        fig_all.savefig(rabi_all_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_all)
 
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
@@ -195,7 +203,7 @@ class T1_Measurement(BaseMeasurement):
         
         self.T1_values = {}
         
-        fig, ax = plt.subplots(dpi=300)
+        fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
             probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
@@ -211,26 +219,34 @@ class T1_Measurement(BaseMeasurement):
             exponential_fit = exp_decay_func(measurement_times, tau_fit, amplitude_fit)
             self.T1_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
 
-            ax.scatter(1e6*measurement_times,
-                       probabilities_excited,
-                       label=f'{self.qubit_labels[qubit_idx]}: T1 = {1e6 * tau_fit:.1f} μs',
-                       alpha=0.6,
-                       color = f'C{qubit_idx}')
-            ax.plot(1e6*measurement_times,
-                    exponential_fit,
-                    alpha=0.6,
-                    color = f'C{qubit_idx}')
-        ax.set_xlabel('Time (μs)')
-        ax.set_ylabel(r'$P(|1\rangle)$')
-        ax.set_title(f'T1 measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
-        ax.set_ylim(-0.05, 1.05)
-        ax.legend()
-        T1_fig_path = (
+            fig, ax = plt.subplots(dpi=300)
+            for ax_obj in [ax_all, ax]:
+                ax_obj.scatter(1e6*measurement_times,
+                        probabilities_excited,
+                        label=f'{self.qubit_labels[qubit_idx]}: T1 = {1e6 * tau_fit:.1f} μs',
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.plot(1e6*measurement_times,
+                        exponential_fit,
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.set_xlabel('Time (μs)')
+                ax_obj.set_ylabel(r'$P(|1\rangle)$')
+                ax_obj.set_title(f'T1 measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_ylim(-0.05, 1.05)
+                ax_obj.legend()
+            T1_fig_path = (
+                Path(self.record.project_dir)
+                / f"T1_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(T1_fig_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        T1_all_fig_path = (
             Path(self.record.project_dir)
-            / f"T1_plots_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            / f"T1_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
         )
-        fig.savefig(T1_fig_path, dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        fig_all.savefig(T1_all_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_all)
 
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
@@ -339,7 +355,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
         
         self.T2_ramsey_values = {}
         
-        fig, ax = plt.subplots(dpi=300)
+        fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
             probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
@@ -366,26 +382,34 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                                      osc_offset_fit, exp_offset_fit)
             self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
 
-            ax.scatter(1e6*measurement_times,
-                       probabilities_excited,
-                       label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fit:.1f} μs',
-                       alpha=0.6,
-                       color = f'C{qubit_idx}')
-            ax.plot(1e6*measurement_times,
-                    damped_oscillation_fit,
-                    alpha=0.6,
-                    color = f'C{qubit_idx}')
-        ax.set_xlabel('Time (μs)')
-        ax.set_ylabel(r'$P(|1\rangle)$')
-        ax.set_title(f'T2 Ramsey measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
-        ax.set_ylim(-0.05, 1.05)
-        ax.legend()
-        T1_fig_path = (
+            fig, ax = plt.subplots(dpi=300)
+            for ax_obj in [ax_all, ax]:
+                ax_obj.scatter(1e6*measurement_times,
+                        probabilities_excited,
+                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fit:.1f} μs',
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.plot(1e6*measurement_times,
+                        damped_oscillation_fit,
+                        alpha=0.6,
+                        color = f'C{qubit_idx}')
+                ax_obj.set_xlabel('Time (μs)')
+                ax_obj.set_ylabel(r'$P(|1\rangle)$')
+                ax_obj.set_title(f'T2 Ramsey measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_ylim(-0.05, 1.05)
+                ax_obj.legend()
+            T2_ramsey_fig_path = (
+                Path(self.record.project_dir)
+                / f"T2_Ramsey_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(T2_ramsey_fig_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        T2_ramsey_all_fig_path = (
             Path(self.record.project_dir)
-            / f"T2_Ramsey_plots_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            / f"T2_Ramsey_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
         )
-        fig.savefig(T1_fig_path, dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        fig_all.savefig(T2_ramsey_all_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_all)
 
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
