@@ -347,7 +347,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                     measurement_times[-1] / 2,
                     self.artificial_detuning,
                     0.0,
-                    max(probabilities_excited),
+                    0.5*(max(probabilities_excited) - min(probabilities_excited)),
                     0.0,
                     0.0
                 ]
