@@ -21,7 +21,8 @@ from qi_utilities.utility_functions.data_handling import StoreProjectRecord
 from qi_utilities.device_simulation.simulators import NoisySimulator
 
 def split_raw_shots(result: Result,
-                    qubit_list: list,
+                    qubit_list: list = None,
+                    ro_register_length: int = None,
                     circuit_nr: int = None):
     """
     This function splits the raw data shots of the measurement result
@@ -38,21 +39,32 @@ def split_raw_shots(result: Result,
             used in the original quantum circuit.
             e.g. for qubits q0 and q2, qubit_list = [0, 2].
 
+        ro_register_length (int):
+            Specifies explicitly the bit register length used for the
+            readout circuits. It overrides the qubit_list entry.
+
         circuit_nr (int):
             The circuit number within a job, since a job can contain
             multiple quantum circuits.
             Defaults to None for a job with a single quantum circuit.
     """
 
-    num_qubits = len(qubit_list)
+    if ro_register_length is not None:
+        pass
+    else:
+        if qubit_list is not None:
+            num_qubits = len(qubit_list)
+            ro_register_length = num_qubits*2**num_qubits
+    if qubit_list is None and ro_register_length is None:
+        raise ValueError("qubit_list and ro_register_length are not allowed to be None at the same time!")
+    
     raw_shots = result.get_memory(circuit_nr)
-
     experiment_shots = []
     ro_mitigation_shots = []
 
     for raw_shots_entry in range(len(raw_shots)):
-        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:num_qubits*2**num_qubits])
-        experiment_shots.append(raw_shots[raw_shots_entry][num_qubits*2**num_qubits::])
+        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:ro_register_length])
+        experiment_shots.append(raw_shots[raw_shots_entry][ro_register_length::])
     return experiment_shots, ro_mitigation_shots
 
 def get_ro_corrected_multi_probs(raw_data_probs: list[dict],
@@ -184,6 +196,53 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
 
     return assignment_probability_matrix
 
+def extract_ro_assignment_matrices(ro_mitigation_shots: list,
+                                   qubit_groups: list[list]):
+    """
+    This function expands on the extract_ro_assignment_matrix, using it
+    for more complicated cases where we want to specify manually the
+    qubit_groups for multiple readout assignment matrices contained in the
+    totality of ro_mitigation_shots.
+
+    Args:
+        ro_mitigation_shots (list):
+            The raw data shots returned from the readout mitigation
+            quantum circuits which contain multiple mid-circuit
+            measurement blocks.
+
+            For a quantum circuit containing M number of mid-circuit measurements,
+            and executing it for a number of N shots, len(raw_data_shots) = N,
+            while each entry of the list contains a bitstring of size M.
+
+            The convention followed in each bitstring for a bit register of size K
+            is 'cK-1,cK-2,...,c2,c1,c0', meaning that the rightmost bit corresponds
+            to the very first bit in the bit register.
+
+        qubit_groups (list(list)):
+            An ordered list of lists (of the kind of qubit_list, see definition of 
+            extract_ro_assignment_matrix above) containing the different integer
+            groupings of qubits.
+            e.g. qubit_groups = [[0, 2], [1, 3]].
+    """
+
+    bit_idx = 0
+    assignment_probability_matrices = {}
+    for qubit_list in qubit_groups:
+        register_length = len(qubit_list)*2**len(qubit_list)
+        reduced_ro_mitigation_shots = [bitstring[bit_idx:bit_idx+register_length] for bitstring in ro_mitigation_shots]
+        num_qubits = len(qubit_list)
+        prepared_states = obtain_binary_list(num_qubits)
+    
+        ro_counts_per_prepared_states = get_multi_counts(reduced_ro_mitigation_shots, num_qubits)
+        assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float64)
+        for prepared_state_idx in range(len(prepared_states)):
+            assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
+                                                    for state in prepared_states]) / len(reduced_ro_mitigation_shots)
+        
+        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix
+        bit_idx += register_length
+
+    return assignment_probability_matrices
 
 def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
                               qubit_list: list):

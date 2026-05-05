@@ -31,11 +31,11 @@ class RabiMeasurement(BaseMeasurement):
                                    qubit_list,
                                    rotation_angles)
         
-        super().__init__(backend,
-                         qubit_list,
-                         qc,
-                         num_shots,
-                         directory)
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
         
         self._data_analysis(rotation_angles)
         
@@ -69,15 +69,18 @@ class RabiMeasurement(BaseMeasurement):
     def _data_analysis(self,
                        rotation_angles: np.array):
         
+        self.rabi_amplitudes = {}
+        
         fig_all, ax_all = plt.subplots(figsize=(18, 5), dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(rotation_angles))]
             params, covariance = curve_fit(cos_func,
                                            rotation_angles,
                                            probabilities_excited)
             a_fit, b_fit, c_fit, d_fit = params
             cosine_fit = cos_func(rotation_angles, a_fit, b_fit, c_fit, d_fit)
+            self.rabi_amplitudes[f'{self.qubit_labels[qubit_idx]} [a.u.]'] = cos_func(np.pi, a_fit, b_fit, c_fit, d_fit)
 
             fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
             for ax_obj in [ax_all, ax]:
@@ -123,8 +126,9 @@ class RabiMeasurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Rotation angles [rad]"] = rotation_angles
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
+        self.experiment_data["Rabi amplitudes"] = self.rabi_amplitudes
         json_file_path = (
             Path(self.record.project_dir)
             / f"rabi_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
@@ -152,11 +156,11 @@ class T1_Measurement(BaseMeasurement):
                                    qubit_list,
                                    measurement_times)
         
-        super().__init__(backend,
-                         qubit_list,
-                         qc,
-                         num_shots,
-                         directory)
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
         
         self._data_analysis(measurement_times)
         
@@ -205,7 +209,7 @@ class T1_Measurement(BaseMeasurement):
         
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             params, covariance = curve_fit(exp_decay_func,
                                            measurement_times,
@@ -253,7 +257,7 @@ class T1_Measurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T1 values"] = self.T1_values
         json_file_path = (
@@ -285,11 +289,11 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                    measurement_times,
                                    artificial_detuning)
         
-        super().__init__(backend,
-                         qubit_list,
-                         qc,
-                         num_shots,
-                         directory)
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
         
         self._data_analysis(measurement_times)
         
@@ -357,7 +361,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
         
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             p0 = [
                     measurement_times[-1] / 2,
@@ -417,7 +421,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Artificial detuning [Hz]"] = self.artificial_detuning
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T2 Ramsey values"] = self.T2_ramsey_values
         json_file_path = (
@@ -449,11 +453,11 @@ class T2_EchoMeasurement(BaseMeasurement):
                                    measurement_times,
                                    artificial_detuning)
         
-        super().__init__(backend,
-                         qubit_list,
-                         qc,
-                         num_shots,
-                         directory)
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
         
         self._data_analysis(measurement_times)
         
@@ -530,7 +534,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             p0 = [
                     measurement_times[-1] / 2,
@@ -590,7 +594,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Artificial detuning [Hz]"] = self.artificial_detuning
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T2 echo values"] = self.T2_echo_values
         json_file_path = (
@@ -612,11 +616,11 @@ class AllXYMeasurement(BaseMeasurement):
         qc = self._quantum_circuit(backend,
                                    qubit_list)
         
-        super().__init__(backend,
-                         qubit_list,
-                         qc,
-                         num_shots,
-                         directory)
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
         
         self._data_analysis()
         
@@ -679,7 +683,7 @@ class AllXYMeasurement(BaseMeasurement):
 
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_qubit[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(2*len(AllXY_syndrome_labels))]
             
             ideal_data = np.concatenate((0 * np.ones(10), 0.5 * np.ones(24),
@@ -737,7 +741,7 @@ class AllXYMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_qubit[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["AllXY deviations"] = self.allxy_deviations
         json_file_path = (

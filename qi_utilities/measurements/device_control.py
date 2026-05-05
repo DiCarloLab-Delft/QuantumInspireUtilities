@@ -11,6 +11,7 @@ class DeviceControl:
         self.num_shots = 2**12
         self.latest_qc = None
         
+        self.rabi_amplitudes = None
         self.T1_values = None
         self.T2_ramsey_values = None
         self.T2_echo_values = None
@@ -29,6 +30,8 @@ class DeviceControl:
                                     num_shots=self.num_shots,
                                     directory=self.current_directory)
         self.latest_qc = rabi_meas.qc
+        self.rabi_amplitudes = rabi_meas.rabi_amplitudes
+        print(self.rabi_amplitudes)
 
     def measure_T1(self,
                    qubit_list: list,
