@@ -1,10 +1,15 @@
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.optimize import curve_fit
 from pathlib import Path
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Pauli, Operator
+from qi_utilities.utility_functions.circuit_modifiers import apply_rotations_from_list
 from qi_utilities.measurements.fitting_functions import exp_decay_func, cos_func, damped_osc_func
+from qi_utilities.utility_functions.raw_data_processing import translate_to_Z_basis, observable_expectation_values_Z_basis
 from qi_utilities.measurements.base_classes import BaseMeasurement
 
 
@@ -751,6 +756,216 @@ class AllXYMeasurement(BaseMeasurement):
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+    
+class BellStateMeasurement(BaseMeasurement):
+
+    def __init__(self,
+                backend,
+                qubit_pairs: list[list[int]],
+                bell_state: str,
+                num_shots: int,
+                directory: str = None):
+        
+        qubit_list = []
+        for qubit_pair in qubit_pairs:
+            for qubit_idx in qubit_pair:
+                if qubit_idx in qubit_list:
+                    raise ValueError("A single qubit cannot be used in multiple pairs at the same time!")
+                else:
+                    qubit_list.append(qubit_idx)
+        self.tomography_bases = [
+                    'XX', 'YX', 'ZX', 'XY', 'YY',
+                    'ZY', 'XZ', 'YZ', 'ZZ'
+                ]
+        self.single_qubit_terms = ['IX', 'IY', 'IZ', 'XI', 'YI', 'ZI']
+        
+        qc = self._quantum_circuit(backend,
+                                qubit_pairs,
+                                bell_state)
+
+        super().__init__(backend=backend,
+                        qubit_list=qubit_list,
+                        qc=qc,
+                        num_shots=num_shots,
+                        n_qubit_routine=2,
+                        qubit_groups = qubit_pairs,
+                        directory=directory)
+        
+        self._data_analysis(qubit_pairs,
+                            bell_state)
+        
+
+    def _quantum_circuit(self,
+                        backend,
+                        qubit_pairs: list[list[int]],
+                        bell_state: str):
+
+        def create_bell_states(qc: QuantumCircuit,
+                            qubit_pairs: list[list[int]],
+                            bell_state: str):
+            
+            bell_state_rotations = {
+                "phi_plus": [0.0, 0.0],
+                "phi_minus": [np.pi, 0.0],
+                "psi_plus": [0.0, np.pi],
+                "psi_minus": [np.pi, np.pi]
+            }
+
+            for qubit_pair in qubit_pairs:
+                for qubit_idx in qubit_pair:        
+                    qc.reset(qubit_idx)
+            for qubit_pair in qubit_pairs:
+                qc.rx(bell_state_rotations[bell_state][0], qubit_pair[0])
+                qc.rx(bell_state_rotations[bell_state][1], qubit_pair[1])
+            qc.barrier()
+            for qubit_pair in qubit_pairs:
+                qc.h(qubit_pair[0])
+                qc.cx(qubit_pair[0], qubit_pair[1])
+            qc.barrier()
+
+            return qc
+        
+        qc = QuantumCircuit(backend.num_qubits,
+                            2*len(qubit_pairs)*len(self.tomography_bases),
+                            name=f'Bell_State_Tomography')
+        
+        bit_idx = 0
+        for tomography_basis in self.tomography_bases:
+
+            qc = create_bell_states(qc,
+                                    qubit_pairs,
+                                    bell_state)
+            for qubit_pair in qubit_pairs:
+        
+                apply_rotations_from_list(qc,
+                                        tomography_basis,
+                                        qubit_pair,
+                                        np.arange(bit_idx, bit_idx+len(tomography_basis)))
+                bit_idx += 2
+            qc.barrier()
+        return qc
+    
+    def _data_analysis(self,
+                    qubit_pairs,
+                    bell_state):
+        
+        def create_density_state(tomography_dict):
+
+            density_matrix = np.zeros((4, 4), dtype=complex)
+            for label, value in tomography_dict.items():
+                pauli_op = Operator(Pauli(label)).data
+                density_matrix += (1/4) * value * pauli_op
+            return density_matrix
+        
+        pauli_labels = []
+        for i_idx in ['I', 'X', 'Y', 'Z']:
+            for j_idx in ['I', 'X', 'Y', 'Z']:
+                pauli_labels.append(i_idx+j_idx)
+
+        ideal_bell_states = {
+            "phi_plus":  (1/np.sqrt(2)) * np.array([1, 0, 0, 1]),
+            "phi_minus": (1/np.sqrt(2)) * np.array([1, 0, 0, -1]),
+            "psi_plus":  (1/np.sqrt(2)) * np.array([0, 1, 1, 0]),
+            "psi_minus": (1/np.sqrt(2)) * np.array([0, 1, -1, 0]),
+        }
+
+        self.bell_state_fidelities = {}
+        all_tomographies = {}
+
+        for qubit_pair_idx in range(len(qubit_pairs)):
+
+            tomography_dict = {'II': np.float64(1.0)}
+            for pauli_term_idx in range(len(self.tomography_bases)):
+                pauli_term = self.tomography_bases[pauli_term_idx]
+                pauli_term_in_Z = translate_to_Z_basis(pauli_term)
+                tomography_dict[pauli_term] = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
+                                                                        pauli_term_in_Z)[0]
+                
+            for sq_pauli_term_idx in range(len(self.single_qubit_terms)):
+                sq_pauli_term = self.single_qubit_terms[sq_pauli_term_idx]
+                sq_pauli_term_stripped = sq_pauli_term.replace("I", "")
+                sq_pauli_term_idx = sq_pauli_term.index(sq_pauli_term_stripped)
+                for pauli_term_idx in range(len(self.tomography_bases)):
+                    pauli_term = self.tomography_bases[pauli_term_idx]
+                    if sq_pauli_term_stripped == pauli_term[sq_pauli_term_idx]:
+                        sq_pauli_term_in_Z = translate_to_Z_basis(sq_pauli_term)
+                        tomography_dict[sq_pauli_term] = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
+                                                                                                sq_pauli_term_in_Z)[0]
+
+            tomography_dict = {pauli_term: tomography_dict[pauli_term] for pauli_term in pauli_labels}
+            tomography_values = [tomography_dict[pauli_term] for pauli_term in tomography_dict.keys()]
+            all_tomographies[f"Q{qubit_pairs[qubit_pair_idx]}"] = tomography_dict
+
+            density_matrix = create_density_state(tomography_dict)
+            density_matrix_real = np.real(density_matrix)
+            density_matrix_imag = np.imag(density_matrix)            
+            fidelity = float(np.real(np.vdot(ideal_bell_states[bell_state], density_matrix @ ideal_bell_states[bell_state])))
+            self.bell_state_fidelities[f"Q{qubit_pairs[qubit_pair_idx]} [a.u.]"] = fidelity
+
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5.5), dpi=300)
+            fig.subplots_adjust(top=0.75, wspace=0.3)
+            fig.suptitle(
+                f'Bell-state tomography\n{self.backend.name} processor\n'
+                f'Qubit pair: Q{qubit_pairs[qubit_pair_idx]} | Fidelity = {100*fidelity:.1f} %\n'
+                f'{self.record.date_timestamp}_{self.record.job_timestamp}',
+                fontsize=14
+            )
+            norm = TwoSlopeNorm(vmin=-1.0, vcenter=0.0, vmax=1.0)
+            basis_labels = ["00", "01", "10", "11"]
+
+            ax0 = axes[0]
+            ax0.bar(range(len(tomography_values)), tomography_values)
+            ax0.set_xticks(range(len(tomography_values)))
+            ax0.set_xticklabels(pauli_labels, rotation=45)
+            ax0.set_xlabel("Observable")
+            ax0.set_ylabel("Expectation value")
+            ax0.set_ylim(-1.05, 1.05)
+            ax0.set_title("Tomography observable values")
+
+            norm = TwoSlopeNorm(vmin=-1.0, vcenter=0.0, vmax=1.0)
+            ax1 = axes[1]
+            im1 = ax1.imshow(density_matrix_real, cmap="RdBu_r", norm=norm)
+            ax1.set_title("Density matrix - real part")
+            ax1.set_xticks(range(4))
+            ax1.set_yticks(range(4))
+            ax1.set_xticklabels(basis_labels)
+            ax1.set_yticklabels(basis_labels)
+            ax1.set_aspect("equal")
+            divider1 = make_axes_locatable(ax1)
+            cax1 = divider1.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(im1, cax=cax1)
+
+            ax2 = axes[2]
+            im2 = ax2.imshow(density_matrix_imag, cmap="RdBu_r", norm=norm)
+            ax2.set_title("Density matrix - imaginary part")
+            ax2.set_xticks(range(4))
+            ax2.set_yticks(range(4))
+            ax2.set_xticklabels(basis_labels)
+            ax2.set_yticklabels(basis_labels)
+            ax2.set_aspect("equal")
+            divider2 = make_axes_locatable(ax2)
+            cax2 = divider2.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(im2, cax=cax2)
+
+            tomography_fig_path = (
+                Path(self.record.project_dir)
+                / f"tomography_plot_Q{qubit_pairs[qubit_pair_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(tomography_fig_path, dpi=300, bbox_inches="tight")
+            plt.close(fig)
+
+        self.experiment_data = {}
+        self.experiment_data["Experiment name"] = self.record.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Processed data"] = all_tomographies
+        self.experiment_data["AllXY deviations"] = self.bell_state_fidelities
+        json_file_path = (
+            Path(self.record.project_dir)
+            / f"tomography_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+        )
+        with open(json_file_path, 'w') as file:
+            json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
 
 def make_json_serializable(obj):

@@ -16,6 +16,7 @@ class DeviceControl:
         self.T2_ramsey_values = None
         self.T2_echo_values = None
         self.allxy_deviations = None
+        self.bell_state_fidelities = None
 
     def measure_rabi(self,
                      qubit_list: list,
@@ -98,3 +99,22 @@ class DeviceControl:
         self.latest_qc = allxy_meas.qc
         self.allxy_deviations = allxy_meas.allxy_deviations
         print(self.allxy_deviations)
+
+    def measure_bell_state_fidelity(self,
+                                    qubit_pairs: list[list],
+                                    bell_state: str,
+                                    num_shots: int = None):
+        
+        if bell_state not in ["phi_plus", "phi_minus",
+                              "psi_plus", "psi_minus"]:
+            raise ValueError("Invalid input bell_state.")
+        if num_shots is not None:
+            self.num_shots = num_shots
+        fidelity_meas = BellStateMeasurement(backend=self.backend,
+                                             qubit_pairs=qubit_pairs,
+                                             bell_state=bell_state,
+                                             num_shots=self.num_shots,
+                                             directory=self.current_directory)
+        self.latest_qc = fidelity_meas.qc
+        self.bell_state_fidelities = fidelity_meas.bell_state_fidelities
+        print(self.bell_state_fidelities)
