@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, minimize
 from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Operator
@@ -870,6 +870,7 @@ class BellStateMeasurement(BaseMeasurement):
         }
 
         self.bell_state_fidelities = {}
+        self.bell_state_fidelities_old = {} # for debugging purposes
         all_tomographies = {}
 
         for qubit_pair_idx in range(len(qubit_pairs)):
@@ -885,20 +886,32 @@ class BellStateMeasurement(BaseMeasurement):
                 sq_pauli_term = self.single_qubit_terms[sq_pauli_term_idx]
                 sq_pauli_term_stripped = sq_pauli_term.replace("I", "")
                 sq_pauli_term_idx = sq_pauli_term.index(sq_pauli_term_stripped)
+                tomography_value = 0
+                num_expectation_values = 0
                 for pauli_term_idx in range(len(self.tomography_bases)):
                     pauli_term = self.tomography_bases[pauli_term_idx]
                     if sq_pauli_term_stripped == pauli_term[sq_pauli_term_idx]:
                         sq_pauli_term_in_Z = translate_to_Z_basis(sq_pauli_term)
-                        tomography_dict[sq_pauli_term] = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
+                        expectation_value = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
                                                                                                 sq_pauli_term_in_Z)[0]
+                        tomography_value += expectation_value
+                        num_expectation_values += 1
+                tomography_dict[sq_pauli_term] = tomography_value / num_expectation_values
 
             tomography_dict = {pauli_term: tomography_dict[pauli_term] for pauli_term in pauli_labels}
             tomography_values = [tomography_dict[pauli_term] for pauli_term in tomography_dict.keys()]
             all_tomographies[f"Q{qubit_pairs[qubit_pair_idx]}"] = tomography_dict
 
-            density_matrix = create_density_state(tomography_dict)
+            density_matrix_old = create_density_state(tomography_dict)
+            density_matrix_real_old = np.real(density_matrix_old)
+            density_matrix_imag_old = np.imag(density_matrix_old)            
+            fidelity_old = float(np.real(np.vdot(ideal_bell_states[bell_state], density_matrix_old @ ideal_bell_states[bell_state])))
+            self.bell_state_fidelities_old[f"Q{qubit_pairs[qubit_pair_idx]} [a.u.]"] = fidelity_old
+
+            density_matrix = self._project_to_density_matrix(tomography_dict,
+                                                                 pauli_labels)    
             density_matrix_real = np.real(density_matrix)
-            density_matrix_imag = np.imag(density_matrix)            
+            density_matrix_imag = np.imag(density_matrix)      
             fidelity = float(np.real(np.vdot(ideal_bell_states[bell_state], density_matrix @ ideal_bell_states[bell_state])))
             self.bell_state_fidelities[f"Q{qubit_pairs[qubit_pair_idx]} [a.u.]"] = fidelity
 
@@ -967,6 +980,61 @@ class BellStateMeasurement(BaseMeasurement):
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+    def _project_to_density_matrix(self,
+                                   tomography_dict: dict,
+                                   pauli_labels: list):
+
+        def build_density_matrix(t_params):
+            T = np.zeros((4, 4), dtype=complex) # will build lower triangular matrix
+            idx = 0
+            for i in range(4):
+                for j in range(i + 1):
+                    if i == j:
+                        # real diagonal entries
+                        T[i, i] = t_params[idx]
+                        idx += 1
+                    else:
+                        # complex lower triangle
+                        real = t_params[idx]
+                        imag = t_params[idx + 1]
+                        T[i, j] = real + 1j * imag
+                        idx += 2
+            rho = T.conj().T @ T
+            rho /= np.trace(rho) # normalization
+            return rho
+
+        def expectation_from_rho(rho, pauli_ops):
+            return np.array([
+                np.real(np.trace(rho @ P)) for P in pauli_ops
+            ])
+
+        def loss(params, measured_expectations, pauli_ops):
+            rho = build_density_matrix(params)
+            predicted = expectation_from_rho(rho, pauli_ops)
+            return np.sum((predicted - measured_expectations)**2)
+
+        measured_expectations = np.array([
+            tomography_dict[label] for label in pauli_labels
+        ])
+        pauli_ops = [
+            Operator(Pauli(label)).data for label in pauli_labels
+        ]
+
+        init_t_params = np.zeros(16)
+        # We start with the identity matrix
+        init_t_params[0] = 1.0   # T00
+        init_t_params[1] = 1.0   # T11
+        init_t_params[3] = 1.0   # T22
+        init_t_params[6] = 1.0   # T33
+
+        result = minimize(
+            loss,
+            init_t_params,
+            args=(measured_expectations, pauli_ops),
+            method='L-BFGS-B'
+        )
+        rho_mle = build_density_matrix(result.x)
+        return rho_mle
 
 def make_json_serializable(obj):
     if isinstance(obj, np.ndarray):
