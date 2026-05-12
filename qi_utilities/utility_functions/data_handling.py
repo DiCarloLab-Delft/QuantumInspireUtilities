@@ -190,7 +190,7 @@ class StoreProjectRecord:
         timestamp = timestamp_utc.astimezone()
         self.date_timestamp = timestamp.strftime("%Y%m%d")
         self.job_timestamp = timestamp.strftime("%H%M%S")
-        self.job_id = job.circuits_run_data[job_idx].results.job_id
+        self.job_id = job.circuits_run_data[job_idx].results.job_id # also job.circuits_run_data[job_idx].job_id works
 
         if directory is not None:
             self.base_dir = Path(directory)

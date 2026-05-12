@@ -100,6 +100,24 @@ class DeviceControl:
         self.allxy_deviations = allxy_meas.allxy_deviations
         print(self.allxy_deviations)
 
+    def measure_conditional_oscillation(self,
+                                        qubit_pairs: list[list],
+                                        num_angles: int = 19,
+                                        cz_repetitions: int = 1,
+                                        num_shots: int = None):
+        
+        if num_shots is not None:
+            self.num_shots = num_shots
+        cond_osc_meas = ConditionalOscMeasurement(backend=self.backend,
+                                                  qubit_pairs=qubit_pairs,
+                                                  num_angles=num_angles,
+                                                  cz_repetitions=cz_repetitions,
+                                                  num_shots=self.num_shots,
+                                                  directory=self.current_directory)
+        self.latest_qc = cond_osc_meas.qc
+        self.cond_osc_params = cond_osc_meas.cond_osc_params
+        print(self.cond_osc_params)
+
     def measure_bell_state_fidelity(self,
                                     qubit_pairs: list[list],
                                     bell_state: str,

@@ -107,7 +107,7 @@ class BaseMeasurement:
                 for bitstring in ro_corrected_probs[measurement_idx].keys():
                     reversed_bitstring = bitstring[::-1]
                     for dict_bitstring in meas_result.keys():
-                        if reversed_bitstring[qubit_idx:qubit_idx+n_qubit_routine] == dict_bitstring:
+                        if reversed_bitstring[qubit_idx:qubit_idx+n_qubit_routine] == dict_bitstring[::-1]:
                             meas_result[dict_bitstring] += ro_corrected_probs[measurement_idx][bitstring]
                             break
                 ro_corrected_probs_qubit.append(meas_result)

@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.optimize import curve_fit, minimize
+from uncertainties import ufloat
+from scipy.stats import sem
 from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Operator
@@ -11,6 +13,9 @@ from qi_utilities.utility_functions.circuit_modifiers import apply_rotations_fro
 from qi_utilities.measurements.fitting_functions import exp_decay_func, cos_func, damped_osc_func
 from qi_utilities.utility_functions.raw_data_processing import translate_to_Z_basis, observable_expectation_values_Z_basis
 from qi_utilities.measurements.base_classes import BaseMeasurement
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 class RabiMeasurement(BaseMeasurement):
@@ -347,7 +352,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                     qubit_idx)
             qc.barrier()
 
-            # rotating qubit state (ideally to the |1> state)
+            # rotating qubit state
             for qubit_idx in qubit_list:
                 qc.rx(np.pi/2, qubit_idx)
             qc.barrier()
@@ -520,7 +525,7 @@ class T2_EchoMeasurement(BaseMeasurement):
                     qubit_idx)
             qc.barrier()
 
-            # rotating qubit state (ideally to the |1> state)
+            # rotating qubit state
             for qubit_idx in qubit_list:
                 qc.rx(np.pi/2, qubit_idx)
             qc.barrier()
@@ -756,6 +761,276 @@ class AllXYMeasurement(BaseMeasurement):
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+class ConditionalOscMeasurement(BaseMeasurement):
+
+    def __init__(self,
+                backend,
+                qubit_pairs: list[list[int]],
+                num_shots: int,
+                num_angles: int = 19,
+                cz_repetitions: int = 1,
+                directory: str = None):
+        
+        qubit_list = []
+        for qubit_pair in qubit_pairs:
+            for qubit_idx in qubit_pair:
+                if qubit_idx in qubit_list:
+                    raise ValueError("A single qubit cannot be used in multiple pairs at the same time!")
+                else:
+                    qubit_list.append(qubit_idx)
+        
+        angles = np.linspace(0.0, 2*np.pi, num_angles)
+        qc = self._quantum_circuit(backend,
+                                   qubit_pairs,
+                                   angles,
+                                   cz_repetitions)
+
+        super().__init__(backend=backend,
+                        qubit_list=qubit_list,
+                        qc=qc,
+                        num_shots=num_shots,
+                        n_qubit_routine=2,
+                        qubit_groups = qubit_pairs,
+                        directory=directory)
+        
+        self._data_analysis(qubit_pairs,
+                            angles,
+                            cz_repetitions)
+        
+
+    def _quantum_circuit(self,
+                         backend,
+                         qubit_pairs: list[list],
+                         angles: np.array = np.linspace(0.0, 2*np.pi, 19),
+                         cz_repetitions: int = 1,
+                         cases: list = ['no_excitation', 'excitation']):
+            
+        qc = QuantumCircuit(backend.num_qubits,
+                            2*len(qubit_pairs)*len(angles)*len(cases),
+                            name = 'Conditional_Oscillation')
+
+        bit_idx = 0
+        for case in cases:
+            for angle in angles:
+
+                for qubit_pair in qubit_pairs:
+                    for qubit_idx in qubit_pair:        
+                        qc.reset(qubit_idx)
+                qc.barrier()
+
+                for qubit_pair in qubit_pairs:
+                    if case == 'excitation':
+                        qc.rx(np.pi, qubit_pair[1])
+                    qc.rx(np.pi/2, qubit_pair[0])
+                qc.barrier()
+
+                for dummy_idx in range(cz_repetitions):
+                    for qubit_pair in qubit_pairs:
+                        qc.cz(qubit_pair[0], qubit_pair[1])
+                    qc.barrier()
+
+                for qubit_pair in qubit_pairs:
+                    if case == 'excitation':
+                        qc.rx(np.pi, qubit_pair[1])
+                    qc.rz(angle, qubit_pair[0])
+                    qc.rx(np.pi/2, qubit_pair[0])
+                qc.barrier()
+
+                for qubit_pair in qubit_pairs:
+                    for qubit_idx in qubit_pair:
+                        qc.measure(qubit = qubit_idx, cbit = bit_idx)
+                        bit_idx += 1
+                qc.barrier()
+        
+        return qc
+    
+    def _data_analysis(self,
+                       qubit_pairs,
+                       angles: np.array = np.linspace(0.0, 2*np.pi, 19),
+                       cz_repetitions: int = 1):
+
+        self.cond_osc_params = {f'Q{qubit_pairs[qubit_pair_idx]}': {} for qubit_pair_idx in range(len(qubit_pairs))}
+
+        for qubit_pair_idx in range(len(qubit_pairs)):
+
+            probs = self.ro_corrected_probs_per_n_qubits[qubit_pair_idx]
+            probs_per_qubit = self._collect_data_per_n_qubits(probs)
+
+            q_targ_off = probs_per_qubit[0][0:int(len(probs_per_qubit[0])/2)]
+            q_targ_on = probs_per_qubit[0][int(len(probs_per_qubit[0])/2):]
+            q_ctrl_off = probs_per_qubit[1][0:int(len(probs_per_qubit[1])/2)]
+            q_ctrl_on = probs_per_qubit[1][int(len(probs_per_qubit[1])/2):]
+
+            q_targ_off_frac_in_1 = [q_targ_off[meas_idx]['1'] for meas_idx in range(len(q_targ_off))]
+            q_targ_on_frac_in_1 = [q_targ_on[meas_idx]['1'] for meas_idx in range(len(q_targ_on))]
+            q_ctrl_off_frac_in_1 = [q_ctrl_off[meas_idx]['1'] for meas_idx in range(len(q_ctrl_off))]
+            q_ctrl_on_frac_in_1 = [q_ctrl_on[meas_idx]['1'] for meas_idx in range(len(q_ctrl_on))]
+
+            angles_fit = np.linspace(0.0, 2*np.pi, 101)
+            params_off, covariance_off = curve_fit(cos_func,
+                                        angles,
+                                        q_targ_off_frac_in_1,
+                                        bounds=(
+                                                    [0.1, 0.5, -np.inf, 0.1],   # lower bounds
+                                                    [0.6, 1.2, np.inf, 0.9]  # upper bounds
+                                            ))
+            stderr_off = np.sqrt(np.diag(covariance_off))
+            a_off_fit, b_off_fit, c_off_fit, d_off_fit = params_off
+            cosine_off_fit = cos_func(angles_fit, a_off_fit, b_off_fit, c_off_fit, d_off_fit)
+
+            params_on, covariance_on = curve_fit(cos_func,
+                                        angles,
+                                        q_targ_on_frac_in_1,
+                                        bounds=(
+                                                    [0.1, 0.5, -np.inf, 0.1],   # lower bounds
+                                                    [0.6, 1.2, np.inf, 0.9]  # upper bounds
+                                            ))
+            stderr_on = np.sqrt(np.diag(covariance_on))
+            a_on_fit, b_on_fit, c_on_fit, d_on_fit = params_on
+            cosine_on_fit = cos_func(angles_fit, a_on_fit, b_on_fit, c_on_fit, d_on_fit)
+
+            phase_off = ufloat(c_off_fit * (180/np.pi), stderr_off[2] * (180/np.pi)) % 360
+            phase_on = ufloat(c_on_fit * (180/np.pi), stderr_on[2] * (180/np.pi)) % 360
+            phase_diff = (phase_off - phase_on) % 360
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Phase Difference [deg]'] = phase_diff.nominal_value
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Phase Off [deg]'] = phase_off.nominal_value
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Phase On [deg]'] = phase_on.nominal_value
+
+            osc_offs_off = ufloat(d_off_fit, stderr_off[3])
+            osc_offs_on = ufloat(d_on_fit, stderr_on[3])
+            offs_diff = abs(osc_offs_off-osc_offs_on)
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Oscillation offset difference [a.u.]'] = offs_diff.nominal_value
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Oscillation offset Off [a.u.]'] = osc_offs_off.nominal_value
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Oscillation offset On [a.u.]'] = osc_offs_on.nominal_value
+
+            osc_amp_off = ufloat(a_off_fit, stderr_off[0])
+            osc_amp_on = ufloat(a_on_fit, stderr_on[0])
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Oscillation amplitude Off'] = osc_amp_off.nominal_value
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Oscillation amplitude On'] = osc_amp_on.nominal_value
+
+            fig, ax = plt.subplots(dpi=300)
+            ax.plot(angles,
+                    q_targ_off_frac_in_1,
+                    alpha=0.9,
+                    color='C0',
+                    marker='o',
+                    label = r'$q_{\text{ctrl}}$' + ' Off')
+            ax.plot(angles,
+                    q_targ_on_frac_in_1,
+                    alpha=0.9,
+                    color='C1',
+                    marker='o',
+                    label = r'$q_{\text{ctrl}}$' + ' On')
+            ax.plot(angles_fit,
+                    cosine_off_fit,
+                    alpha=0.6,
+                    color='C3',
+                    linewidth=2.0,
+                    label = 'Fit ' + r'$q_{\text{ctrl}}$' + ' Off')
+            ax.plot(angles_fit,
+                    cosine_on_fit,
+                    alpha=0.6,
+                    color='C4',
+                    linewidth=2.0,
+                    label = 'Fit ' + r'$q_{\text{ctrl}}$' + ' On')
+            ax.axhline(osc_offs_off.nominal_value, color='C0', linestyle=':', alpha=0.9)
+            ax.axhline(osc_offs_on.nominal_value, color='C1', linestyle=':', alpha=0.9)
+            ax.set_xlabel('Phase (deg)')
+            ax.set_ylabel(r'$q_{\text{targ.}}$'+' fraction in '+r'$|1\rangle$')
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Phase diff: {phase_diff:.1f} deg')
+            ax.plot([], [], ' ', label=f'Phase Off: {phase_off:.1f} deg')
+            ax.plot([], [], ' ', label=f'Phase On: {phase_on:.1f} deg')
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Offs. diff: {offs_diff*100:.2f} %')
+            ax.plot([], [], ' ', label=f'Osc. offs. Off: {osc_offs_off:.4f}')
+            ax.plot([], [], ' ', label=f'Osc. offs. On: {osc_offs_on:.4f}')
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Osc. amp. Off: {osc_amp_off:.4f}')
+            ax.plot([], [], ' ', label=f'Osc. amp. On: {osc_amp_on:.4f}')
+            deg_sign = r'$^{\circ}$'
+            x_labels = ['0'+deg_sign, '60'+deg_sign, '120'+deg_sign, '180'+deg_sign,
+                        '240'+deg_sign, '300'+deg_sign, '360'+deg_sign]
+            label_locs = np.arange(0.0, 360+60, 60) * (np.pi/180)
+            ax.set_xticks(label_locs)
+            ax.set_xticklabels(x_labels, rotation=45)
+            ax.set_title(
+                f'Conditional oscillation measurement'
+                f'\n{self.backend.name} processor'
+                f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
+                    f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
+                f'\nCZ repetitions: {cz_repetitions}'
+                f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+            ax.set_ylim(-0.05, 1.05)
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            cond_osc_main_fig_path = (
+                Path(self.record.project_dir)
+                / f"cond_osc_Q{qubit_pairs[qubit_pair_idx]}_main_plot_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(cond_osc_main_fig_path, dpi=300, bbox_inches="tight")
+            plt.close(fig)
+
+            ctrl_off = ufloat(
+                np.mean(q_ctrl_off_frac_in_1),
+                sem(q_ctrl_off_frac_in_1)
+            )
+            ctrl_on = ufloat(
+                np.mean(q_ctrl_on_frac_in_1),
+                sem(q_ctrl_on_frac_in_1)
+            )
+            missing_fraction = ctrl_on - ctrl_off
+            self.cond_osc_params[f'Q{qubit_pairs[qubit_pair_idx]}']['Missing fraction [%]'] = missing_fraction.nominal_value*100
+
+            fig, ax = plt.subplots(dpi=300)
+            ax.plot(angles,
+                    q_ctrl_off_frac_in_1,
+                    alpha=0.9,
+                    color='C0',
+                    marker='o',
+                    label = r'$q_{\text{ctrl}}$' + ' Off')
+            ax.plot(angles,
+                    q_ctrl_on_frac_in_1,
+                    alpha=0.9,
+                    color='C1',
+                    marker='o',
+                    label = r'$q_{\text{ctrl}}$' + ' On')
+            ax.set_xlabel('Phase (deg)')
+            ax.set_ylabel(r'$q_{\text{ctrl}}$'+' fraction in '+r'$|1\rangle$')
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Missing frac.: {missing_fraction*100:.1f} %')
+            deg_sign = r'$^{\circ}$'
+            x_labels = ['0'+deg_sign, '60'+deg_sign, '120'+deg_sign, '180'+deg_sign,
+                        '240'+deg_sign, '300'+deg_sign, '360'+deg_sign]
+            label_locs = np.arange(0.0, 360+60, 60) * (np.pi/180)
+            ax.set_xticks(label_locs)
+            ax.set_xticklabels(x_labels, rotation=45)
+            ax.set_title(
+                f'Conditional oscillation measurement'
+                f'\n{self.backend.name} processor'
+                f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
+                    f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
+                f'\nCZ repetitions: {cz_repetitions}'
+                f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+            ax.set_ylim(-0.05, 1.05)
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.8))
+            cond_osc_spectator_fig_path = (
+                Path(self.record.project_dir)
+                / f"cond_osc_Q{qubit_pairs[qubit_pair_idx]}_spectator_plot_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(cond_osc_spectator_fig_path, dpi=300, bbox_inches="tight")
+            plt.close(fig)
+
+        self.experiment_data = {}
+        self.experiment_data["Experiment name"] = self.record.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Fitted data"] = self.cond_osc_params
+        json_file_path = (
+            Path(self.record.project_dir)
+            / f"cond_osc_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+        )
+        with open(json_file_path, 'w') as file:
+            json.dump(make_json_serializable(self.experiment_data), file, indent=3)
     
 class BellStateMeasurement(BaseMeasurement):
 
@@ -972,7 +1247,7 @@ class BellStateMeasurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Processed data"] = all_tomographies
-        self.experiment_data["AllXY deviations"] = self.bell_state_fidelities
+        self.experiment_data["Bell-state fidelities"] = self.bell_state_fidelities
         json_file_path = (
             Path(self.record.project_dir)
             / f"tomography_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
