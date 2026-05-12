@@ -1,5 +1,8 @@
 import numpy as np
 
+def linear_func(x, a, b):
+    return np.polyval([a, b], x) # for f(x) = a*x + b
+
 def exp_decay_func(t, tau, amplitude):
     return amplitude * np.exp(-(t / tau))
 

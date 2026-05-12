@@ -10,10 +10,11 @@ from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Operator
 from qi_utilities.utility_functions.circuit_modifiers import apply_rotations_from_list
-from qi_utilities.measurements.fitting_functions import exp_decay_func, cos_func, damped_osc_func
+from qi_utilities.measurements.fitting_functions import linear_func, exp_decay_func, cos_func, damped_osc_func
 from qi_utilities.utility_functions.raw_data_processing import translate_to_Z_basis, observable_expectation_values_Z_basis
 from qi_utilities.measurements.base_classes import BaseMeasurement
 import warnings
+from lmfit import Model
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -614,6 +615,216 @@ class T2_EchoMeasurement(BaseMeasurement):
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+class FlippingMeasurement(BaseMeasurement):
+
+    def __init__(self,
+                 backend,
+                 qubit_list: list,
+                 num_shots: int,
+                 number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                 equator: bool = True,
+                 rotation_axis: str = 'x', # 'x' or 'y'
+                 rotation_angle: str = '180', # '180' or '90'
+                 directory: str = None):
+        """
+        Args:
+            rotation_angles (np.array):
+                The different rotation angles for the Rabi oscillation
+                expressed in radians [rad].
+            
+        """
+        
+        assert rotation_angle in ['90', '180']
+        assert rotation_axis.lower() in ['x', 'y']
+        
+        qc = self._quantum_circuit(backend,
+                                   qubit_list,
+                                   number_of_flips,
+                                   equator,
+                                   rotation_axis,
+                                   rotation_angle)
+        
+        super().__init__(backend=backend,
+                         qubit_list=qubit_list,
+                         qc=qc,
+                         num_shots=num_shots,
+                         directory=directory)
+        
+        self._data_analysis(number_of_flips)
+        
+    def _quantum_circuit(self,
+                         backend,
+                         qubit_list: list,
+                         number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                         equator: bool = True,
+                         rotation_axis: str = 'x', # 'x' or 'y'
+                         rotation_angle: str = '180'): # '180' or '90'
+
+        bit_idx = 0
+        self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
+        qc = QuantumCircuit(backend.num_qubits,
+                            len(number_of_flips)*len(qubit_list),
+                            name=f'Flipping_{self.qubit_labels}')
+
+        for i, n in enumerate(number_of_flips):
+            for qubit_idx in qubit_list:
+                qc.reset(qubit_idx)
+            qc.barrier()
+
+            if equator == True:
+                for qubit_idx in qubit_list:
+                    if rotation_axis == 'y':
+                        qc.ry(np.pi/2, qubit_idx)
+                    else:
+                        qc.rx(np.pi/2, qubit_idx)
+                qc.barrier()
+
+            for dummy_idx in range(n):
+                for qubit_idx in qubit_list:
+                    if rotation_angle == '90':
+                        if rotation_axis == 'y':
+                            qc.ry(np.pi/2, qubit_idx)
+                            qc.ry(np.pi/2, qubit_idx)
+                        else:
+                            qc.rx(np.pi/2, qubit_idx)
+                            qc.rx(np.pi/2, qubit_idx)
+                    else:
+                        if rotation_axis == 'y':
+                            qc.ry(np.pi, qubit_idx)
+                        else:
+                            qc.rx(np.pi, qubit_idx)
+                qc.barrier()
+
+            for qubit_idx in qubit_list:
+                qc.measure(qubit = qubit_idx, cbit = bit_idx)
+                bit_idx += 1
+            qc.barrier()
+            
+        return qc
+    
+    def _data_analysis(self,
+                       number_of_flips):
+        
+        cos_fit_axis = np.linspace(0, number_of_flips[-1], 300)
+        self.flipping_parameters = {f'Q{qubit_idx}': {} for qubit_idx in self.qubit_list}
+
+        fig_all, ax_all = plt.subplots(dpi=300)
+        for qubit_idx in range(len(self.qubit_list)):
+            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+                                    for entry in range(len(number_of_flips))]
+
+            linear_model = Model(linear_func)
+            linear_params = linear_model.make_params(
+                a=0.0,
+                b=0.5
+            )
+            linear_params['b'].vary = True
+            linear_fit = linear_model.fit(
+                probabilities_excited,
+                linear_params,
+                x=number_of_flips
+            )
+            a_linear_fit, b_linear_fit = linear_fit.params['a'].value, linear_fit.params['b'].value
+            linear_curve = linear_func(number_of_flips, a_linear_fit, b_linear_fit)
+            linear_freq = - a_linear_fit / (2*np.pi)
+            scale_factor_line = 1 / (1 - 4 * linear_freq)
+            self.flipping_parameters[self.qubit_labels[qubit_idx]]['Line scale factor [a.u.]'] = scale_factor_line
+
+            cos_model = Model(cos_func)
+            cos_params = cos_model.make_params(
+                a=0.45,
+                b=0.1,
+                c=0.0,
+                d=0.5 # for d fixed to 0.5, a can only be in [0.0, 0.5]
+            )
+            cos_params['a'].vary = True
+            cos_params['a'].min=0.05
+            cos_params['a'].max=0.5
+            cos_params['b'].vary = True
+            cos_params['b'].min = 0.05
+            cos_params['c'].vary = True
+            cos_params['d'].vary = False
+            cos_fit = cos_model.fit(
+                probabilities_excited,
+                cos_params,
+                x=number_of_flips
+            )
+            a_cos_fit, b_cos_fit, c_cos_fit, d_cos_fit = (cos_fit.params['a'].value, cos_fit.params['b'].value,
+                                                        cos_fit.params['c'].value, cos_fit.params['d'].value)
+            cosine_curve = cos_func(cos_fit_axis, a_cos_fit, b_cos_fit, c_cos_fit, d_cos_fit)
+            scale_factor_cos = 1 / (1 + 2*b_cos_fit)
+            self.flipping_parameters[self.qubit_labels[qubit_idx]]['Cos scale factor [a.u.]'] = scale_factor_cos
+
+            if linear_fit.bic < cos_fit.bic:
+                best_fit = 'Line'
+            else:
+                best_fit = 'Cos'
+            self.flipping_parameters[self.qubit_labels[qubit_idx]]['Linear fit BIC'] = linear_fit.bic
+            self.flipping_parameters[self.qubit_labels[qubit_idx]]['Cos fit BIC'] = cos_fit.bic
+            self.flipping_parameters[self.qubit_labels[qubit_idx]]['Best fit'] = best_fit
+
+            fig, ax = plt.subplots(dpi=300)
+            for ax_obj in [ax_all, ax]:
+                ax_obj.plot(number_of_flips,
+                        probabilities_excited,
+                        alpha=0.6,
+                        color = f'C{qubit_idx}',
+                        marker='o',
+                        label = f'Qubit {self.qubit_labels[qubit_idx]}')
+                
+                ax_obj.set_xlabel(r'Number of (effective) $\pi$ pulses')
+                ax_obj.set_ylabel(r'Population $|1\rangle$')
+                ax_obj.set_title(f'Flipping measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_ylim(-0.05, 1.05)
+                
+            ax.plot(number_of_flips,
+                    linear_curve,
+                    alpha=0.8,
+                    color = 'red',
+                    label = 'Line fit',
+                    linestyle='--',
+                    linewidth=1.2)
+            ax.plot(cos_fit_axis,
+                    cosine_curve,
+                    alpha=0.8,
+                    color = 'purple',
+                    label = 'Cos fit',
+                    linestyle='--',
+                    linewidth=1.2)
+
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Best fit: {best_fit}')
+            ax.plot([], [], ' ', label=f'Line scale factor: {scale_factor_line:.4f}')
+            ax.plot([], [], ' ', label=f'Cos scale factor: {scale_factor_cos:.4f}')
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.73))
+            flipping_fig_path = (
+                Path(self.record.project_dir)
+                / f"flipping_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(flipping_fig_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        flipping_all_fig_path = (
+            Path(self.record.project_dir)
+            / f"flipping_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+        )
+        fig_all.savefig(flipping_all_fig_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_all)
+
+        self.experiment_data = {}
+        self.experiment_data["Experiment name"] = self.record.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+                                                 for qubit_idx in range(len(self.qubit_list))}
+        self.experiment_data["Flipping parameters"] = self.flipping_parameters
+        json_file_path = (
+            Path(self.record.project_dir)
+            / f"flipping_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+        )
+        with open(json_file_path, 'w') as file:
+            json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+     
 
 class AllXYMeasurement(BaseMeasurement):
 

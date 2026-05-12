@@ -86,6 +86,28 @@ class DeviceControl:
         self.T2_echo_values = T2_echo_meas.T2_echo_values
         print(self.T2_echo_values)
 
+    def measure_flipping(self,
+                         qubit_list: list,
+                         num_shots: int = None,
+                         number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                         equator: bool = True,
+                         rotation_axis: str = 'x', # 'x' or 'y'
+                         rotation_angle: str = '180'): # '180' or '90'
+        
+        if num_shots is not None:
+            self.num_shots = num_shots
+        flipping_meas = FlippingMeasurement(backend=self.backend,
+                                            qubit_list=qubit_list,
+                                            num_shots=self.num_shots,
+                                            number_of_flips=number_of_flips,
+                                            equator=equator,
+                                            rotation_axis=rotation_axis,
+                                            rotation_angle=rotation_angle,
+                                            directory=self.current_directory)
+        self.latest_qc = flipping_meas.qc
+        self.flipping_parameters = flipping_meas.flipping_parameters
+        print(self.flipping_parameters)
+
     def measure_allxy(self,
                       qubit_list: list,
                       num_shots: int = None):
