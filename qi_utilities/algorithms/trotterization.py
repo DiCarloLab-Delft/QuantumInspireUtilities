@@ -59,9 +59,11 @@ def apply_trotter_block(qc: QuantumCircuit,
                 target_qubits.append(qubit_counter)
             qubit_counter += 1
 
+        reduced_string = pauli_string.replace("I", "")
+        reduced_operator = SparsePauliOp(reduced_string, hamiltonian[entry].coeffs)
         unitary_label = 'Trotter block,' + f' Pauli: {pauli_string}' + \
                         f'\nn = {trotter_order},' + f' Time = {time_step*1e9:.2f} ns'
-        unitary_gate = PauliEvolutionGate(operator = hamiltonian[entry],
+        unitary_gate = PauliEvolutionGate(operator = reduced_operator,
                                           time = time_step / trotter_order,
                                           label = unitary_label)
         qc.append(unitary_gate, target_qubits)
@@ -145,7 +147,7 @@ def construct_trotterization_circuit(initial_state: str,
     qc.barrier()
 
     if midcircuit_measurement == True:
-        apply_pre_measurement_rotations(qc, measured_observable, [num_qubits*time_step, num_qubits*time_step + 1])
+        apply_pre_measurement_rotations(qc, measured_observable, np.arange(num_qubits*time_step, num_qubits*(time_step + 1), 1))
     else:
         apply_pre_measurement_rotations(qc, measured_observable)
     qc.barrier()

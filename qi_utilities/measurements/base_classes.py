@@ -60,7 +60,7 @@ class BaseMeasurement:
         job = self.backend.run(qc_transpiled,
                           shots=self.num_shots,
                           memory = True) # NOTE: memory is set to True in order to return raw data!
-        result = job.result(timeout = 600)
+        result = job.result(timeout = 24 * 60 * 60) # a total of 24 hours
         self.record = StoreProjectRecord(job,
                                          directory,
                                          silent = True)

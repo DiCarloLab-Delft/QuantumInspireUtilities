@@ -10,11 +10,13 @@ from pathlib import Path
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Operator
 from qi_utilities.utility_functions.circuit_modifiers import apply_rotations_from_list
-from qi_utilities.measurements.fitting_functions import linear_func, exp_decay_func, cos_func, damped_osc_func
+from qi_utilities.measurements.fitting_functions import (linear_func, exp_decay_func, cos_func, damped_osc_func,
+                                                         double_damped_osc_func)
 from qi_utilities.utility_functions.raw_data_processing import translate_to_Z_basis, observable_expectation_values_Z_basis
 from qi_utilities.measurements.base_classes import BaseMeasurement
 import warnings
 from lmfit import Model
+from scipy.fft import fft, fftfreq
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -59,7 +61,7 @@ class RabiMeasurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             len(rotation_angles)*len(qubit_list),
-                            name=f'Rabi_{self.qubit_labels}')
+                            name=f'Rabi_Oscillation_{backend.name}')
 
         for step_idx in range(len(rotation_angles)):
             for qubit_idx in qubit_list:
@@ -90,23 +92,26 @@ class RabiMeasurement(BaseMeasurement):
                                            rotation_angles,
                                            probabilities_excited)
             a_fit, b_fit, c_fit, d_fit = params
-            cosine_fit = cos_func(rotation_angles, a_fit, b_fit, c_fit, d_fit)
+            rotation_angles_fit = np.linspace(rotation_angles[0],
+                                              rotation_angles[-1],
+                                              num=101)
+            cosine_fit = cos_func(rotation_angles_fit, a_fit, b_fit, c_fit, d_fit)
             self.rabi_amplitudes[f'{self.qubit_labels[qubit_idx]} [a.u.]'] = cos_func(np.pi, a_fit, b_fit, c_fit, d_fit)
 
             fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
             for ax_obj in [ax_all, ax]:
-                ax_obj.scatter(rotation_angles,
+                ax_obj.plot(rotation_angles,
                         probabilities_excited,
                         label=f'Qubit {self.qubit_labels[qubit_idx]}',
                         alpha=0.6,
-                        color = f'C{qubit_idx}')
-                ax_obj.plot(rotation_angles,
-                        cosine_fit,
-                        alpha=0.6,
-                        color = f'C{qubit_idx}')
+                        color = f'C{qubit_idx}',
+                        marker='o')
                 ax_obj.set_xlabel('Applied rotation')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'Rabi oscillation\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'Rabi oscillation'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
         
                 labels = []
                 for step_idx in range(len(rotation_angles)):
@@ -117,14 +122,20 @@ class RabiMeasurement(BaseMeasurement):
                 ax_obj.set_xticks(label_locs)
                 ax_obj.set_xticklabels(labels, rotation=65)
                 ax_obj.set_ylim(-0.05, 1.05)
-                ax_obj.legend()
                 ax_obj.grid(True)
+            ax.plot(rotation_angles_fit,
+                    cosine_fit,
+                    alpha=0.7,
+                    color = 'red',
+                    label = 'Fit: ' + r'$f(x) = a\cdot\cos (bx + c) + d$')
+            ax.legend()
             rabi_fig_path = (
                 Path(self.record.project_dir)
                 / f"rabi_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
             )
             fig.savefig(rabi_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         rabi_all_fig_path = (
             Path(self.record.project_dir)
             / f"rabi_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -153,8 +164,8 @@ class T1_Measurement(BaseMeasurement):
     def __init__(self,
                  backend,
                  qubit_list: list,
-                 measurement_times: np.array,
                  num_shots: int,
+                 measurement_times: np.array = np.linspace(0, 150e-6, num=41),
                  directory: str = None):
         """
         Args:
@@ -163,9 +174,9 @@ class T1_Measurement(BaseMeasurement):
         
         """
         
-        qc = self._quantum_circuit(backend,
-                                   qubit_list,
-                                   measurement_times)
+        qc = self._quantum_circuit(backend=backend,
+                                   qubit_list=qubit_list,
+                                   measurement_times=measurement_times)
         
         super().__init__(backend=backend,
                          qubit_list=qubit_list,
@@ -179,7 +190,7 @@ class T1_Measurement(BaseMeasurement):
     def _quantum_circuit(self,
                         backend,
                         qubit_list: list,
-                        measurement_times: np.array):
+                        measurement_times: np.array = np.linspace(0, 150e-6, num=41)):
 
         cycle_time = 20e-9 # cycle time limitation imposed by the Tuna backend internal software
         total_time = measurement_times[-1]
@@ -190,7 +201,7 @@ class T1_Measurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             num_points*len(qubit_list),
-                            name=f'T1_{self.qubit_labels}')
+                            name=f'T1_{backend.name}')
         
         for time_idx in range(num_points):
             for qubit_idx in qubit_list:
@@ -226,36 +237,46 @@ class T1_Measurement(BaseMeasurement):
                                            measurement_times,
                                            probabilities_excited,
                                            bounds=(
-                                                [0, 0],   # lower bounds
-                                                [np.inf, 2.0]  # upper bounds
+                                                [0, 0, 0],   # lower bounds
+                                                [np.inf, 1.0, 0.5]  # upper bounds
                                             )
                                            )
-            tau_fit, amplitude_fit = params
-            exponential_fit = exp_decay_func(measurement_times, tau_fit, amplitude_fit)
-            self.T1_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
+            stderr = np.sqrt(np.diag(covariance))
+            tau_fit, amplitude_fit, offset_fit = params
+            measurement_times_fit = np.linspace(measurement_times[0],
+                                                measurement_times[-1],
+                                                num = 101)
+            exponential_fit = exp_decay_func(measurement_times_fit, tau_fit, amplitude_fit, offset_fit)
+            self.T1_values[f'{self.qubit_labels[qubit_idx]} [us]'] = np.round(1e6 * tau_fit, 1)
 
             fig, ax = plt.subplots(dpi=300)
             for ax_obj in [ax_all, ax]:
-                ax_obj.scatter(1e6*measurement_times,
-                        probabilities_excited,
-                        label=f'{self.qubit_labels[qubit_idx]}: T1 = {1e6 * tau_fit:.1f} μs',
-                        alpha=0.6,
-                        color = f'C{qubit_idx}')
                 ax_obj.plot(1e6*measurement_times,
-                        exponential_fit,
-                        alpha=0.6,
-                        color = f'C{qubit_idx}')
+                            probabilities_excited,
+                            label=f'{self.qubit_labels[qubit_idx]}: T1 = ({1e6 * tau_fit:.1f}'+r'$\pm$'+f'{1e6 * stderr[0]:.1f}) μs',
+                            alpha=0.6,
+                            color = f'C{qubit_idx}',
+                            marker='o')
                 ax_obj.set_xlabel('Time (μs)')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'T1 measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'T1 measurement'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
-                ax_obj.legend()
+            ax.plot(1e6*measurement_times_fit,
+                    exponential_fit,
+                    alpha=0.7,
+                    color = 'red',
+                    label='Fit: ' + r'$f(t) = a\cdot\exp (-t/\tau) + b$')
+            ax.legend()
             T1_fig_path = (
                 Path(self.record.project_dir)
                 / f"T1_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
             )
             fig.savefig(T1_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         T1_all_fig_path = (
             Path(self.record.project_dir)
             / f"T1_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -329,7 +350,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             num_points*len(qubit_list),
-                            name=f'T2_Ramsey_{self.qubit_labels}')
+                            name=f'T2_Ramsey_{backend.name}')
 
         for time_idx in range(num_points):
             for qubit_idx in qubit_list:
@@ -374,51 +395,199 @@ class T2_RamseyMeasurement(BaseMeasurement):
         for qubit_idx in range(len(self.qubit_list)):
             probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
-            p0 = [
-                    measurement_times[-1] / 2,
-                    self.artificial_detuning,
-                    0.0,
-                    0.5*(max(probabilities_excited) - min(probabilities_excited)),
-                    0.0,
-                    0.0
-                ]
-            params, covariance = curve_fit(damped_osc_func,
-                                           measurement_times,
-                                           probabilities_excited,
-                                           p0 = p0,
-                                           bounds = (
-                                                [0, self.artificial_detuning/2, -np.pi,   0, 0, 0],
-                                                [5*measurement_times[-1], 2*self.artificial_detuning, np.pi, 4.0, np.inf, np.inf]
-                                            )
-                                           )
-            tau_fit, frequency_fit, phase_fit, amplitude_fit, osc_offset_fit, exp_offset_fit = params
-            damped_oscillation_fit = damped_osc_func(measurement_times, tau_fit, frequency_fit,
-                                                     phase_fit, amplitude_fit,
-                                                     osc_offset_fit, exp_offset_fit)
+            # p0 = [
+            #         measurement_times[-1] / 2,
+            #         self.artificial_detuning,
+            #         0.0,
+            #         0.5*(max(probabilities_excited) - min(probabilities_excited)),
+            #         0.5
+            #     ]
+            # params, covariance = curve_fit(damped_osc_func,
+            #                                measurement_times,
+            #                                probabilities_excited,
+            #                                p0 = p0,
+            #                                bounds = (
+            #                                     [0, self.artificial_detuning/2, -np.inf,   0.1, 0.1],
+            #                                     [5*measurement_times[-1], 2*self.artificial_detuning, np.inf, 0.6, 0.9]
+            #                                 )
+            #                                )
+            # tau_fit, frequency_fit, phase_fit, amplitude_fit, offset_fit = params
+            # measurement_times_fit = np.linspace(measurement_times[0],
+            #                                     measurement_times[-1],
+            #                                     num = 301)
+            # damped_oscillation_fit = damped_osc_func(measurement_times_fit, tau_fit, frequency_fit,
+            #                                          phase_fit, amplitude_fit, offset_fit)
+            # self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
+
+            damped_osc_model = Model(damped_osc_func)
+            damped_osc_params = damped_osc_model.make_params(
+                tau = measurement_times[-1] / 2,
+                frequency=self.artificial_detuning,
+                phase=0.0,
+                amplitude=0.5*(max(probabilities_excited) - min(probabilities_excited)),
+                offset=0.5
+            )
+            damped_osc_params['tau'].vary, damped_osc_params['tau'].min, damped_osc_params['tau'].max = (
+                True, 0, 5*measurement_times[-1])
+            damped_osc_params['frequency'].vary, damped_osc_params['frequency'].min, damped_osc_params['frequency'].max = (
+                True, self.artificial_detuning/10, 10*self.artificial_detuning)
+            damped_osc_params['phase'].vary, damped_osc_params['phase'].min, damped_osc_params['phase'].max = (
+                True, -np.inf, np.inf)
+            damped_osc_params['amplitude'].vary, damped_osc_params['amplitude'].min, damped_osc_params['amplitude'].max = (
+                True, 0.4, 0.6)
+            damped_osc_params['offset'].vary, damped_osc_params['offset'].min, damped_osc_params['offset'].max = (
+                True, 0.1, 0.9)
+            damped_oscillation_fit = damped_osc_model.fit(
+                probabilities_excited,
+                damped_osc_params,
+                t=measurement_times
+            )
+            tau_fit, frequency_fit, phase_fit, amplitude_fit, offset_fit = (damped_oscillation_fit.params['tau'].value,
+                damped_oscillation_fit.params['frequency'].value, damped_oscillation_fit.params['phase'].value,
+                damped_oscillation_fit.params['amplitude'].value, damped_oscillation_fit.params['offset'].value)
+            measurement_times_fit = np.linspace(measurement_times[0],
+                                                measurement_times[-1],
+                                                num = 301)
+            damped_oscillation_curve = damped_osc_func(measurement_times_fit, tau_fit, frequency_fit,
+                                                       phase_fit, amplitude_fit, offset_fit)
             self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
+
+
+            double_damped_osc_model = Model(double_damped_osc_func)
+            double_damped_osc_params = double_damped_osc_model.make_params(
+                tau_1 = measurement_times[-1] / 2,
+                frequency_1=self.artificial_detuning,
+                phase_1=0.0,
+                amplitude_1=0.5*(max(probabilities_excited) - min(probabilities_excited)),
+
+                tau_2 = measurement_times[-1] / 2,
+                frequency_2=self.artificial_detuning,
+                phase_2=0.0,
+                amplitude_2=0.5*(max(probabilities_excited) - min(probabilities_excited)),
+
+                offset=0.5
+            )
+            double_damped_osc_params['tau_1'].vary, double_damped_osc_params['tau_1'].min, double_damped_osc_params['tau_1'].max = (
+                True, 0.05*measurement_times[-1], 5*measurement_times[-1])
+            double_damped_osc_params['frequency_1'].vary, double_damped_osc_params['frequency_1'].min, double_damped_osc_params['frequency_1'].max = (
+                True, self.artificial_detuning/4, 3*self.artificial_detuning)
+            double_damped_osc_params['phase_1'].vary, double_damped_osc_params['phase_1'].min, double_damped_osc_params['phase_1'].max = (
+                True, -np.inf, np.inf)
+            double_damped_osc_params['amplitude_1'].vary, double_damped_osc_params['amplitude_1'].min, double_damped_osc_params['amplitude_1'].max = (
+                True, 0.1, 0.9)
+            
+            double_damped_osc_params['tau_2'].vary, double_damped_osc_params['tau_2'].min, double_damped_osc_params['tau_2'].max = (
+                True, 0.05*measurement_times[-1], 5*measurement_times[-1])
+            double_damped_osc_params['frequency_2'].vary, double_damped_osc_params['frequency_2'].min, double_damped_osc_params['frequency_2'].max = (
+                True, self.artificial_detuning/4, 3*self.artificial_detuning)
+            double_damped_osc_params['phase_2'].vary, double_damped_osc_params['phase_2'].min, double_damped_osc_params['phase_2'].max = (
+                True, -np.inf, np.inf)
+            double_damped_osc_params['amplitude_2'].vary, double_damped_osc_params['amplitude_2'].min, double_damped_osc_params['amplitude_2'].max = (
+                True, 0.1, 0.9)
+            double_damped_osc_params['offset'].vary, double_damped_osc_params['offset'].min, double_damped_osc_params['offset'].max = (
+                True, 0.45, 0.55)
+            double_damped_oscillation_fit = double_damped_osc_model.fit(
+                probabilities_excited,
+                double_damped_osc_params,
+                t=measurement_times
+            )
+            (tau_1_fit, frequency_1_fit, phase_1_fit, amplitude_1_fit,
+             tau_2_fit, frequency_2_fit, phase_2_fit, amplitude_2_fit,
+             offset_fit) = (
+                            double_damped_oscillation_fit.params['tau_1'].value, double_damped_oscillation_fit.params['frequency_1'].value, 
+                            double_damped_oscillation_fit.params['phase_1'].value, double_damped_oscillation_fit.params['amplitude_1'].value,
+                            double_damped_oscillation_fit.params['tau_2'].value, double_damped_oscillation_fit.params['frequency_2'].value, 
+                            double_damped_oscillation_fit.params['phase_2'].value, double_damped_oscillation_fit.params['amplitude_2'].value,
+                            damped_oscillation_fit.params['offset'].value)
+            measurement_times_fit = np.linspace(measurement_times[0],
+                                                measurement_times[-1],
+                                                num = 301)
+            double_damped_oscillation_curve = double_damped_osc_func(measurement_times_fit,
+                                                                     tau_1_fit, frequency_1_fit, phase_1_fit, amplitude_1_fit,
+                                                                     tau_2_fit, frequency_2_fit, phase_2_fit, amplitude_2_fit,
+                                                                     offset_fit)
+            print(damped_oscillation_fit.bic, double_damped_oscillation_fit.bic)
+
+            N_data = len(measurement_times)
+            T_data = measurement_times[1] - measurement_times[0]
+            signal_data = probabilities_excited - np.mean(probabilities_excited) # remove DC component for FFT
+            window_data = np.hanning(N_data)
+            signal_data = signal_data * window_data # apply window to data
+            yf_data = fft(signal_data)
+            xf_data = fftfreq(N_data, T_data)[:N_data//2]
+
+            N_fit = len(measurement_times_fit)
+            T_fit = measurement_times_fit[1] - measurement_times_fit[0]
+            signal_fit = double_damped_oscillation_curve - np.mean(double_damped_oscillation_curve) # remove DC component for FFT
+            window_fit = np.hanning(N_fit)
+            signal_fit = signal_fit * window_fit # apply window to data
+            yf_fit = fft(signal_fit)
+            xf_fit = fftfreq(N_fit, T_fit)[:N_fit//2]
+
 
             fig, ax = plt.subplots(dpi=300)
             for ax_obj in [ax_all, ax]:
-                ax_obj.scatter(1e6*measurement_times,
+                ax_obj.plot(1e6*measurement_times,
                         probabilities_excited,
                         label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fit:.1f} μs',
                         alpha=0.6,
-                        color = f'C{qubit_idx}')
-                ax_obj.plot(1e6*measurement_times,
-                        damped_oscillation_fit,
-                        alpha=0.6,
-                        color = f'C{qubit_idx}')
+                        color = f'C{qubit_idx}',
+                        marker='o')
                 ax_obj.set_xlabel('Time (μs)')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'T2 Ramsey measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'T2 Ramsey measurement'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
-                ax_obj.legend()
+            ax.plot(1e6*measurement_times_fit,
+                        damped_oscillation_curve,
+                        alpha=0.7,
+                        color = 'red',
+                        label = 'fit')
+            ax.plot(1e6*measurement_times_fit,
+                        double_damped_oscillation_curve,
+                        alpha=0.7,
+                        color = 'green',
+                        label = 'double fit')
+            
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=f'Double fit 1 frequency: {frequency_1_fit} Hz')
+            ax.plot([], [], ' ', label=f'Double fit 1 T2: {tau_1_fit*1e6} μs')
+            ax.plot([], [], ' ', label=f'Double fit 2 frequency: {frequency_2_fit} Hz')
+            ax.plot([], [], ' ', label=f'Double fit 2 T2: {tau_2_fit*1e6} μs')
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
             T2_ramsey_fig_path = (
                 Path(self.record.project_dir)
                 / f"T2_Ramsey_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
             )
             fig.savefig(T2_ramsey_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
+
+            fig, ax = plt.subplots(dpi=300)
+            ax.plot(xf_data, 2.0/N_data * np.abs(yf_data[:N_data//2]),
+                    label=f'{self.qubit_labels[qubit_idx]} data',
+                    alpha=0.6,
+                    color = f'C{qubit_idx}',
+                    marker='o')
+            ax.plot(xf_fit[:(len(xf_data))], 2.0/N_fit * np.abs(yf_fit[:(len(xf_data))]),
+                    label=f'{self.qubit_labels[qubit_idx]} fit',
+                    alpha=0.7,
+                    color = 'green',
+                    marker='o')
+            ax.axvline(frequency_1_fit, label='Double fit 1 freq')
+            ax.axvline(frequency_2_fit, label='Double fit 2 freq')
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Amplitude")
+            ax.legend()
+            T2_ramsey_FFT_path = (
+                Path(self.record.project_dir)
+                / f"T2_Ramsey_FFT_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            )
+            fig.savefig(T2_ramsey_FFT_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         T2_ramsey_all_fig_path = (
             Path(self.record.project_dir)
             / f"T2_Ramsey_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -493,7 +662,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             num_points*len(qubit_list),
-                            name=f'T2_Echo_{self.qubit_labels}')
+                            name=f'T2_Echo_{backend.name}')
 
         for time_idx in range(num_points):
             for qubit_idx in qubit_list:
@@ -572,26 +741,32 @@ class T2_EchoMeasurement(BaseMeasurement):
 
             fig, ax = plt.subplots(dpi=300)
             for ax_obj in [ax_all, ax]:
-                ax_obj.scatter(1e6*measurement_times,
+                ax_obj.plot(1e6*measurement_times,
                         probabilities_excited,
                         label=f'{self.qubit_labels[qubit_idx]}: T2 echo = {1e6 * tau_fit:.1f} μs',
                         alpha=0.6,
-                        color = f'C{qubit_idx}')
-                ax_obj.plot(1e6*measurement_times,
-                        damped_oscillation_fit,
-                        alpha=0.6,
-                        color = f'C{qubit_idx}')
+                        color = f'C{qubit_idx}',
+                        marker='o')
                 ax_obj.set_xlabel('Time (μs)')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'T2 echo measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'T2 echo measurement'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
-                ax_obj.legend()
+            ax.plot(1e6*measurement_times,
+                    damped_oscillation_fit,
+                    alpha=0.7,
+                    color = 'red',
+                    label = 'fit')
+            ax.legend()
             T2_echo_fig_path = (
                 Path(self.record.project_dir)
                 / f"T2_echo_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
             )
             fig.savefig(T2_echo_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         T2_echo_all_fig_path = (
             Path(self.record.project_dir)
             / f"T2_echo_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -621,7 +796,7 @@ class FlippingMeasurement(BaseMeasurement):
                  backend,
                  qubit_list: list,
                  num_shots: int,
-                 number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                 max_number_of_flips: int = 30,
                  equator: bool = True,
                  rotation_axis: str = 'x', # 'x' or 'y'
                  rotation_angle: str = '180', # '180' or '90'
@@ -634,8 +809,12 @@ class FlippingMeasurement(BaseMeasurement):
             
         """
         
+        if max_number_of_flips % 2 != 0 or max_number_of_flips <= 0:
+            raise ValueError("max_number_of_flips must be an even integer greater than 0!")
         assert rotation_angle in ['90', '180']
         assert rotation_axis.lower() in ['x', 'y']
+
+        number_of_flips = np.arange(0, max_number_of_flips+1, 2)
         
         qc = self._quantum_circuit(backend,
                                    qubit_list,
@@ -655,7 +834,7 @@ class FlippingMeasurement(BaseMeasurement):
     def _quantum_circuit(self,
                          backend,
                          qubit_list: list,
-                         number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                         number_of_flips: np.array,
                          equator: bool = True,
                          rotation_axis: str = 'x', # 'x' or 'y'
                          rotation_angle: str = '180'): # '180' or '90'
@@ -664,7 +843,7 @@ class FlippingMeasurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             len(number_of_flips)*len(qubit_list),
-                            name=f'Flipping_{self.qubit_labels}')
+                            name=f'Flipping_{backend.name}')
 
         for i, n in enumerate(number_of_flips):
             for qubit_idx in qubit_list:
@@ -774,7 +953,10 @@ class FlippingMeasurement(BaseMeasurement):
                 
                 ax_obj.set_xlabel(r'Number of (effective) $\pi$ pulses')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'Flipping measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'Flipping measurement'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
                 
             ax.plot(number_of_flips,
@@ -864,7 +1046,7 @@ class AllXYMeasurement(BaseMeasurement):
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             repetitions*len(AllXY_syndromes)*len(qubit_list),
-                            name=f'AllXY_{self.qubit_labels}')
+                            name=f'AllXY_{backend.name}')
 
         for syndrome_idx, syndrome in enumerate(AllXY_syndromes):
             for repetition_idx in range(repetitions):
@@ -922,10 +1104,13 @@ class AllXYMeasurement(BaseMeasurement):
                         label=f'Qubit {self.qubit_labels[qubit_idx]}',
                         alpha=0.6,
                         color = f'C{qubit_idx}',
-                        linestyle='-', marker='o')
+                        marker='o')
                 ax_obj.set_xlabel('Syndrome')
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_title(f'AllXY measurement\n{self.backend.name} processor\nQubit list: {self.qubit_labels}\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                ax_obj.set_title(
+                    f'AllXY measurement'
+                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
         
                 labels = []
                 for label_idx in range(len(AllXY_syndrome_labels)):
@@ -941,7 +1126,7 @@ class AllXYMeasurement(BaseMeasurement):
                               step=1),
                     ideal_data,
                     label=f'Ideal | Deviation: {deviation_total:.5f}',
-                    alpha=0.6,
+                    alpha=0.7,
                     color = 'red')
             ax.legend()
             allxy_fig_path = (
@@ -950,7 +1135,7 @@ class AllXYMeasurement(BaseMeasurement):
             )
             fig.savefig(allxy_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
-        ax_all.legend()
+        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         allxy_all_fig_path = (
             Path(self.record.project_dir)
             / f"allxy_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -1018,7 +1203,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
             
         qc = QuantumCircuit(backend.num_qubits,
                             2*len(qubit_pairs)*len(angles)*len(cases),
-                            name = 'Conditional_Oscillation')
+                            name = f'Conditional_Oscillation_{backend.name}')
 
         bit_idx = 0
         for case in cases:
@@ -1252,6 +1437,11 @@ class BellStateMeasurement(BaseMeasurement):
                 num_shots: int,
                 directory: str = None):
         
+        if bell_state not in ["phi_plus", "phi_minus",
+                              "psi_plus", "psi_minus"]:
+            raise ValueError("Invalid input bell_state. Available states are: "
+                             "phi_plus, phi_minus, psi_plus, psi_minus.")
+        
         qubit_list = []
         for qubit_pair in qubit_pairs:
             for qubit_idx in qubit_pair:
@@ -1313,7 +1503,7 @@ class BellStateMeasurement(BaseMeasurement):
         
         qc = QuantumCircuit(backend.num_qubits,
                             2*len(qubit_pairs)*len(self.tomography_bases),
-                            name=f'Bell_State_Tomography')
+                            name=f'Bell_State_Tomography_{backend.name}')
         
         bit_idx = 0
         for tomography_basis in self.tomography_bases:
@@ -1387,12 +1577,6 @@ class BellStateMeasurement(BaseMeasurement):
             tomography_dict = {pauli_term: tomography_dict[pauli_term] for pauli_term in pauli_labels}
             tomography_values = [tomography_dict[pauli_term] for pauli_term in tomography_dict.keys()]
             all_tomographies[f"Q{qubit_pairs[qubit_pair_idx]}"] = tomography_dict
-
-            density_matrix_old = create_density_state(tomography_dict)
-            density_matrix_real_old = np.real(density_matrix_old)
-            density_matrix_imag_old = np.imag(density_matrix_old)            
-            fidelity_old = float(np.real(np.vdot(ideal_bell_states[bell_state], density_matrix_old @ ideal_bell_states[bell_state])))
-            self.bell_state_fidelities_old[f"Q{qubit_pairs[qubit_pair_idx]} [a.u.]"] = fidelity_old
 
             density_matrix = self._project_to_density_matrix(tomography_dict,
                                                                  pauli_labels)    

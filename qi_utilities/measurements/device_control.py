@@ -19,10 +19,15 @@ class DeviceControl:
         self.bell_state_fidelities = None
 
     def measure_rabi(self,
-                     qubit_list: list,
-                     rotation_angles = np.linspace(0, 2*np.pi, num=29),
+                     qubit_list: list | str,
+                     rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29),
                      num_shots: int = None):
         
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         rabi_meas = RabiMeasurement(backend=self.backend,
@@ -35,10 +40,15 @@ class DeviceControl:
         print(self.rabi_amplitudes)
 
     def measure_T1(self,
-                   qubit_list: list,
-                   measurement_times: np.array,
+                   qubit_list: list | str,
+                   measurement_times: np.array = np.linspace(0, 150e-6, num=41),
                    num_shots: int = None):
 
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         T1_meas = T1_Measurement(backend=self.backend,
@@ -51,11 +61,16 @@ class DeviceControl:
         print(self.T1_values)
 
     def measure_T2_ramsey(self,
-                          qubit_list: list,
+                          qubit_list: list | str,
                           measurement_times: np.array,
                           artificial_detuning: float = None,
                           num_shots: int = None):
 
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         T2_ramsey_meas = T2_RamseyMeasurement(backend=self.backend,
@@ -69,11 +84,16 @@ class DeviceControl:
         print(self.T2_ramsey_values)
 
     def measure_T2_echo(self,
-                        qubit_list: list,
+                        qubit_list: list | str,
                         measurement_times: np.array,
                         artificial_detuning: float = None,
                         num_shots: int = None):
 
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         T2_echo_meas = T2_EchoMeasurement(backend=self.backend,
@@ -87,19 +107,24 @@ class DeviceControl:
         print(self.T2_echo_values)
 
     def measure_flipping(self,
-                         qubit_list: list,
+                         qubit_list: list | str,
                          num_shots: int = None,
-                         number_of_flips: np.array = np.arange(0, 31, 2), # or np.arange(0, 61, 2)
+                         max_number_of_flips: int = 30,
                          equator: bool = True,
                          rotation_axis: str = 'x', # 'x' or 'y'
                          rotation_angle: str = '180'): # '180' or '90'
         
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         flipping_meas = FlippingMeasurement(backend=self.backend,
                                             qubit_list=qubit_list,
                                             num_shots=self.num_shots,
-                                            number_of_flips=number_of_flips,
+                                            max_number_of_flips=max_number_of_flips,
                                             equator=equator,
                                             rotation_axis=rotation_axis,
                                             rotation_angle=rotation_angle,
@@ -109,9 +134,14 @@ class DeviceControl:
         print(self.flipping_parameters)
 
     def measure_allxy(self,
-                      qubit_list: list,
+                      qubit_list: list | str,
                       num_shots: int = None):
         
+        if type(qubit_list) == str:
+            if qubit_list != 'all':
+                raise ValueError("Invalid input qubit_list: it can either be an array of qubit indices or 'all'.")
+            else:
+                qubit_list = [qubit_idx for qubit_idx in range(self.backend.num_qubits)]
         if num_shots is not None:
             self.num_shots = num_shots
         allxy_meas = AllXYMeasurement(backend=self.backend,
@@ -145,9 +175,6 @@ class DeviceControl:
                                     bell_state: str,
                                     num_shots: int = None):
         
-        if bell_state not in ["phi_plus", "phi_minus",
-                              "psi_plus", "psi_minus"]:
-            raise ValueError("Invalid input bell_state.")
         if num_shots is not None:
             self.num_shots = num_shots
         fidelity_meas = BellStateMeasurement(backend=self.backend,
