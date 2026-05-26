@@ -63,7 +63,6 @@ class DeviceControl:
     def measure_T2_ramsey(self,
                           qubit_list: list | str,
                           measurement_times: np.array,
-                          artificial_detuning: float = None,
                           num_shots: int = None):
 
         if type(qubit_list) == str:
@@ -76,7 +75,6 @@ class DeviceControl:
         T2_ramsey_meas = T2_RamseyMeasurement(backend=self.backend,
                                        qubit_list=qubit_list,
                                        measurement_times=measurement_times,
-                                       artificial_detuning=artificial_detuning,
                                        num_shots=self.num_shots,
                                        directory=self.current_directory)
         self.latest_qc = T2_ramsey_meas.qc

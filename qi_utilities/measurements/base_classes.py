@@ -23,7 +23,8 @@ class BaseMeasurement:
                  num_shots: int,
                  n_qubit_routine: int = 1,
                  qubit_groups: list[list] = None,
-                 directory: str = None):
+                 directory: str = None,
+                 store_record: bool = True):
 
         if n_qubit_routine > 1:
             if qubit_groups is None:
@@ -41,13 +42,15 @@ class BaseMeasurement:
         for qubit_list in qubit_groups:
             self.qc = apply_readout_circuit(self.qc,
                                             qubit_list)  
-        result = self._create_and_execute_job(directory)
+        result = self._create_and_execute_job(directory,
+                                              store_record)
         self._extract_data(result,
                            qubit_groups,
                            n_qubit_routine)
 
     def _create_and_execute_job(self,
-                                directory: str = None):
+                                directory: str = None,
+                                store_record: bool = True):
         
         tuna_backends_basis_gates = ['id', 's', 'sdg', 't', 'tdg', 'x', 'rx', 'y', 'ry', 'z', 'rz', 'cz', 'delay', 'reset']
         qc_transpiled = transpile(self.qc,
@@ -61,9 +64,10 @@ class BaseMeasurement:
                           shots=self.num_shots,
                           memory = True) # NOTE: memory is set to True in order to return raw data!
         result = job.result(timeout = 24 * 60 * 60) # a total of 24 hours
-        self.record = StoreProjectRecord(job,
-                                         directory,
-                                         silent = True)
+        if store_record == True:
+            self.record = StoreProjectRecord(job,
+                                            directory,
+                                            silent = True)
         return result
         
     def _extract_data(self,
