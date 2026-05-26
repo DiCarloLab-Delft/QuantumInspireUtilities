@@ -144,7 +144,7 @@ def measure_ro_assignment_matrix(backend: QIBackend | NoisySimulator,
     raw_data_shots, ro_mitigation_shots = split_raw_shots(result, qubit_list)
     ro_assignment_matrix = extract_ro_assignment_matrix(ro_mitigation_shots, qubit_list)
 
-    return ro_assignment_matrix
+    return ro_assignment_matrix # take transpose for correct definition
 
 def extract_ro_assignment_matrix(ro_mitigation_shots: list,
                                  qubit_list: list):
@@ -182,8 +182,55 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                  for state in prepared_states]) / len(ro_mitigation_shots)
 
-    return assignment_probability_matrix
+    return assignment_probability_matrix.T # take transpose for correct definition
 
+def extract_ro_assignment_matrices(ro_mitigation_shots: list,
+                                   qubit_groups: list[list]):
+    """
+    This function expands on the extract_ro_assignment_matrix, using it
+    for more complicated cases where we want to specify manually the
+    qubit_groups for multiple readout assignment matrices contained in the
+    totality of ro_mitigation_shots.
+
+    Args:
+        ro_mitigation_shots (list):
+            The raw data shots returned from the readout mitigation
+            quantum circuits which contain multiple mid-circuit
+            measurement blocks.
+
+            For a quantum circuit containing M number of mid-circuit measurements,
+            and executing it for a number of N shots, len(raw_data_shots) = N,
+            while each entry of the list contains a bitstring of size M.
+
+            The convention followed in each bitstring for a bit register of size K
+            is 'cK-1,cK-2,...,c2,c1,c0', meaning that the rightmost bit corresponds
+            to the very first bit in the bit register.
+
+        qubit_groups (list(list)):
+            An ordered list of lists (of the kind of qubit_list, see definition of 
+            extract_ro_assignment_matrix above) containing the different integer
+            groupings of qubits.
+            e.g. qubit_groups = [[0, 2], [1, 3]].
+    """
+
+    bit_idx = 0
+    assignment_probability_matrices = {}
+    for qubit_list in qubit_groups:
+        register_length = len(qubit_list)*2**len(qubit_list)
+        reduced_ro_mitigation_shots = [bitstring[bit_idx:bit_idx+register_length] for bitstring in ro_mitigation_shots]
+        num_qubits = len(qubit_list)
+        prepared_states = obtain_binary_list(num_qubits)
+    
+        ro_counts_per_prepared_states = get_multi_counts(reduced_ro_mitigation_shots, num_qubits)
+        assignment_probability_matrix = np.zeros([len(prepared_states), len(prepared_states)], dtype=np.float64)
+        for prepared_state_idx in range(len(prepared_states)):
+            assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
+                                                    for state in prepared_states]) / len(reduced_ro_mitigation_shots)
+        
+        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix.T # take transpose for correct definition
+        bit_idx += register_length
+
+    return assignment_probability_matrices
 
 def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
                               qubit_list: list):
@@ -243,9 +290,9 @@ def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
     ax.tick_params(axis='x', rotation=60)
 
     ax.xaxis.tick_top()
-    ax.set_xlabel("Declared state")
+    ax.set_xlabel("Prepared state")
     ax.xaxis.set_label_position('top')
-    ax.set_ylabel("Prepared state")
+    ax.set_ylabel("Declared state")
     ax.set_title(f"Readout assignment matrix\nQubit list: {qubit_list_label}")
 
     plt.setp(ax.get_xticklabels(), ha="center")
