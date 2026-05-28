@@ -870,7 +870,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 ax1.legend(loc='center right', bbox_to_anchor=(1.65, 0.85))
 
                 markers = {'minus': 's', 'plus': 'x'}
-                colors = {'minus': 'red', 'plus': 'purple'}
+                colors = {'minus': 'darkred', 'plus': 'purple'}
                 sign = {'minus': '-', 'plus': '+'}
                 ax2.plot(1e6*measurement_times,
                         multi_probabilities_excited[winning_config],
