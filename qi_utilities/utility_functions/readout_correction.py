@@ -194,7 +194,7 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                  for state in prepared_states]) / len(ro_mitigation_shots)
 
-    return assignment_probability_matrix
+    return assignment_probability_matrix.T
 
 def extract_ro_assignment_matrices(ro_mitigation_shots: list,
                                    qubit_groups: list[list]):
@@ -239,7 +239,7 @@ def extract_ro_assignment_matrices(ro_mitigation_shots: list,
             assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                     for state in prepared_states]) / len(reduced_ro_mitigation_shots)
         
-        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix
+        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix.T
         bit_idx += register_length
 
     return assignment_probability_matrices
@@ -302,9 +302,9 @@ def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
     ax.tick_params(axis='x', rotation=60)
 
     ax.xaxis.tick_top()
-    ax.set_xlabel("Declared state")
+    ax.set_xlabel("Prepared state")
     ax.xaxis.set_label_position('top')
-    ax.set_ylabel("Prepared state")
+    ax.set_ylabel("Declared state")
     ax.set_title(f"Readout assignment matrix\nQubit list: {qubit_list_label}")
 
     plt.setp(ax.get_xticklabels(), ha="center")

@@ -6,8 +6,8 @@ def linear_func(x, a, b):
 def exp_decay_func(t, tau, amplitude, offset):
     return amplitude * np.exp(-(t / tau)) + offset
 
-def cos_func(x, a, b, c, d):
-    return a * np.cos(b*x + c) + d
+def cos_func(x, amplitude, frequency, phase, offset):
+    return amplitude * np.cos(frequency*x + phase) + offset
 
 def damped_osc_func(t, tau, frequency, phase, amplitude, offset):
     return amplitude * np.exp(-(t / tau)) * np.cos(2 * np.pi * frequency * t + phase) + offset

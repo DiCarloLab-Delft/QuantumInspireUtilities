@@ -1,12 +1,33 @@
+"""
+Module implementing various single- and two-qubit characterization
+experiments, routinely used in a superconducting qubits lab environment
+in order to benchmark a processor's performance and to obtain various
+performance metrics, such as a qubit's relaxation time T1 and decoherence
+time T2.
+
+Each measurement class contains two main functions, "_quantum_circuit()",
+which uniquely defines the experiment quantum circuit(s), and the
+"_data_analysis()", which analyzes the experiment output data accordingly.
+The quantum circuits created in each measurement class are handled similarly
+by a single generic class "BaseMeasurement", which is also responsible for storing
+all relevant project record data, such as the raw shots, circuits executed, etc.
+
+Authors: Marios Samiotis
+"""
+
 import json
+from pathlib import Path
+from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy.optimize import curve_fit, minimize
-from uncertainties import ufloat
+from scipy.fft import fft, fftfreq
 from scipy.stats import sem
-from pathlib import Path
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit, minimize
+from lmfit import Model
+from uncertainties import ufloat
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Operator
 from qi_utilities.utility_functions.circuit_modifiers import apply_rotations_from_list
@@ -14,55 +35,90 @@ from qi_utilities.measurements.fitting_functions import (linear_func, exp_decay_
                                                          double_damped_osc_func)
 from qi_utilities.utility_functions.raw_data_processing import translate_to_Z_basis, observable_expectation_values_Z_basis
 from qi_utilities.measurements.base_classes import BaseMeasurement
-import warnings
-from lmfit import Model
-from scipy.fft import fft, fftfreq
-from scipy.signal import find_peaks
 
+import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 class RabiMeasurement(BaseMeasurement):
+    """
+    This measurement class implements a Rabi oscillation, which is one of the
+    simplest experiments performed with a qubit. The qubit is rotated (driven)
+    around the x or y axis of the Bloch sphere, with the probability of measuring
+    the qubit in the ground (prob(|0>)) or excited (prob(|1>)) state having a
+    sinusoidal response to the driving amplitude.
+
+    Since all single-qubit gate rotations have a fixed duration for any selected backend,
+    usually set to 20 ns, the Rabi amplitude is associated with a rotation angle, meaning,
+    a larger Rabi amplitude corresponds to a larger single-qubit rotation angle achieved
+    within the same single-qubit gate duration.
+
+    This experiment serves as a general check of whether the qubit behaves well
+    as a two-level system, since this assumption breaks down when the oscillation of the
+    probabilities prob(|0>) or prob(|1>) diverge from the expected sinusoidal response
+    with respect to the driving amplitude [1].
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 5, section 5.2.1.
+    """
 
     def __init__(self,
                  backend,
                  qubit_list: list,
                  num_shots: int,
                  rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29),
+                 rotation_axis: str = 'x',
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         """
         Args:
             rotation_angles (np.array):
                 The different rotation angles for the Rabi oscillation
                 expressed in radians [rad].
-            
         """
         
         if len(rotation_angles) < 4:
-            raise ValueError("rotation_angles must have at least 4 entries!")
+            raise ValueError("Invalid input rotation_angles. Input rotation_angles "
+                             "must have at least 4 entries!")
+        if rotation_axis not in ['x', 'y']:
+            raise ValueError("Invalid input rotation_axis. Available inputs are: "
+                             "'x', or 'y'.")
         
         qc = self._quantum_circuit(backend,
                                    qubit_list,
-                                   rotation_angles)
+                                   rotation_angles,
+                                   rotation_axis)
         
         super().__init__(backend=backend,
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points = use_ro_cal_points,
                          directory=directory)
         
-        self._data_analysis(rotation_angles)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
+        self._data_analysis(rotation_angles,
+                            rotation_axis)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
     def _quantum_circuit(self,
                         backend,
                         qubit_list: list,
-                        rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29)):
+                        rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29),
+                        rotation_axis: str = 'x'):
 
         bit_idx = 0
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
         qc = QuantumCircuit(backend.num_qubits,
                             len(rotation_angles)*len(qubit_list),
-                            name=f'Rabi_Oscillation_{backend.name}')
+                            name=f'Rabi_Oscillation_{rotation_axis}_axis_{backend.name}')
 
         for step_idx in range(len(rotation_angles)):
             for qubit_idx in qubit_list:
@@ -70,7 +126,10 @@ class RabiMeasurement(BaseMeasurement):
             qc.barrier()
 
             for qubit_idx in qubit_list:
-                qc.rx(rotation_angles[step_idx], qubit_idx)
+                if rotation_axis == 'x':
+                    qc.rx(rotation_angles[step_idx], qubit_idx)
+                if rotation_axis == 'y':
+                    qc.ry(rotation_angles[step_idx], qubit_idx)
             qc.barrier()
 
             for qubit_idx in qubit_list:
@@ -81,23 +140,79 @@ class RabiMeasurement(BaseMeasurement):
         return qc
     
     def _data_analysis(self,
-                       rotation_angles: np.array):
+                       rotation_angles: np.array,
+                       rotation_axis: str):
+        
+        def fit_cosine_function(rotation_angles,
+                                probabilities_excited):
+            
+            cos_fit = None
+            best_bic = np.inf
+            for fit_trial_idx in range(30):
+                cos_model = Model(cos_func)
+                cos_params = cos_model.make_params(
+                    amplitude = np.random.uniform(0.45, 0.55),
+                    frequency= np.random.uniform(0.9, 1.1),
+                    phase=np.random.uniform(-1.0, 1.0) * np.pi,
+                    offset=np.random.uniform(0.45, 0.55)
+                )
+                cos_params['amplitude'].vary, cos_params['amplitude'].min, cos_params['amplitude'].max = (
+                    True, 0.4, 0.6)
+                cos_params['frequency'].vary, cos_params['frequency'].min, cos_params['frequency'].max = (
+                    True, 0.5, 1.5)
+                cos_params['phase'].vary, cos_params['phase'].min, cos_params['phase'].max = (
+                    True, -np.pi, np.pi)
+                cos_params['offset'].vary, cos_params['offset'].min, cos_params['offset'].max = (
+                    True, 0.4, 0.6)
+                cos_trial_fit = cos_model.fit(
+                    probabilities_excited,
+                    cos_params,
+                    x=rotation_angles
+                )
+                if cos_trial_fit.bic < best_bic:
+                    best_bic = cos_trial_fit.bic
+                    cos_fit = cos_trial_fit
+            return cos_fit
         
         self.rabi_amplitudes = {}
-        
         fig_all, ax_all = plt.subplots(figsize=(18, 5), dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(rotation_angles))]
-            params, covariance = curve_fit(cos_func,
-                                           rotation_angles,
-                                           probabilities_excited)
-            a_fit, b_fit, c_fit, d_fit = params
+            
+            # Iterate 30 times for best fit
+            cos_fit = fit_cosine_function(rotation_angles,
+                                          probabilities_excited)
+            amplitude_fit, frequency_fit, phase_fit, offset_fit = (
+                cos_fit.params['amplitude'].value, cos_fit.params['frequency'].value,
+                cos_fit.params['phase'].value, cos_fit.params['offset'].value)
             rotation_angles_fit = np.linspace(rotation_angles[0],
                                               rotation_angles[-1],
-                                              num=101)
-            cosine_fit = cos_func(rotation_angles_fit, a_fit, b_fit, c_fit, d_fit)
-            self.rabi_amplitudes[f'{self.qubit_labels[qubit_idx]} [a.u.]'] = cos_func(np.pi, a_fit, b_fit, c_fit, d_fit)
+                                              num=2001)
+            cos_curve = cos_func(rotation_angles_fit, amplitude_fit, frequency_fit,
+                                 phase_fit, offset_fit)
+            self.rabi_amplitudes[f'{self.qubit_labels[qubit_idx]} [a.u.]'] = cos_func(np.pi, amplitude_fit,
+                                                                                      frequency_fit, phase_fit, offset_fit)
+
+            # p0 = [
+            #         0.5*(max(probabilities_excited) - min(probabilities_excited)),
+            #         measurement_times[-1] / 2,
+            #         self.artificial_detuning,
+            #         np.pi,
+            #         0.5*(max(probabilities_excited) - min(probabilities_excited)),
+            #         0.0,
+            #         0.0
+            #     ]
+            # params, covariance = curve_fit(cos_func,
+            #                                rotation_angles,
+            #                                probabilities_excited,
+            #                                p0 = p0)
+            # a_fit, b_fit, c_fit, d_fit = params
+            # rotation_angles_fit = np.linspace(rotation_angles[0],
+            #                                   rotation_angles[-1],
+            #                                   num=101)
+            # cosine_fit = cos_func(rotation_angles_fit, a_fit, b_fit, c_fit, d_fit)
+            # self.rabi_amplitudes[f'{self.qubit_labels[qubit_idx]} [a.u.]'] = cos_func(np.pi, a_fit, b_fit, c_fit, d_fit)
 
             fig, ax = plt.subplots(figsize=(18, 5), dpi=300)
             for ax_obj in [ax_all, ax]:
@@ -117,7 +232,10 @@ class RabiMeasurement(BaseMeasurement):
                 labels = []
                 for step_idx in range(len(rotation_angles)):
                     angle_in_degrees = (360 / (2 * np.pi)) * rotation_angles[step_idx]
-                    step_label = f"rx{round(angle_in_degrees)}"
+                    if rotation_axis == 'x':
+                        step_label = f"rx{round(angle_in_degrees)}"
+                    if rotation_axis == 'y':
+                        step_label = f"ry{round(angle_in_degrees)}"
                     labels.append(step_label)
                 label_locs = rotation_angles
                 ax_obj.set_xticks(label_locs)
@@ -125,11 +243,16 @@ class RabiMeasurement(BaseMeasurement):
                 ax_obj.set_ylim(-0.05, 1.05)
                 ax_obj.grid(True)
             ax.plot(rotation_angles_fit,
-                    cosine_fit,
+                    cos_curve,
                     alpha=0.7,
                     color = 'red',
                     label = 'Fit: ' + r'$f(x) = a\cdot\cos (bx + c) + d$')
-            ax.legend()
+            ax.plot([], [], ' ', label=' ')
+            ax.plot([], [], ' ', label=r'$a=$' + f'{amplitude_fit:.2f}')
+            ax.plot([], [], ' ', label=r'$b=$' + f'{frequency_fit:.2f}')
+            ax.plot([], [], ' ', label=r'$c=$' + f'{(phase_fit/np.pi):.2f}' + r'$\cdot \pi$')
+            ax.plot([], [], ' ', label=r'$d=$' + f'{offset_fit:.2f}')
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.7))
             rabi_fig_path = (
                 Path(self.record.project_dir)
                 / f"rabi_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
@@ -149,7 +272,7 @@ class RabiMeasurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Rotation angles [rad]"] = rotation_angles
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["Rabi amplitudes"] = self.rabi_amplitudes
         json_file_path = (
@@ -167,6 +290,7 @@ class T1_Measurement(BaseMeasurement):
                  qubit_list: list,
                  num_shots: int,
                  measurement_times: np.array = np.linspace(0, 150e-6, num=41),
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         """
         Args:
@@ -183,9 +307,16 @@ class T1_Measurement(BaseMeasurement):
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(measurement_times)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
 
     def _quantum_circuit(self,
@@ -232,7 +363,7 @@ class T1_Measurement(BaseMeasurement):
         
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             params, covariance = curve_fit(exp_decay_func,
                                            measurement_times,
@@ -290,7 +421,7 @@ class T1_Measurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T1 values"] = self.T1_values
         json_file_path = (
@@ -308,6 +439,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                  qubit_list: list,
                  measurement_times: np.array,
                  num_shots: int,
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         """
         Args:
@@ -326,9 +458,16 @@ class T2_RamseyMeasurement(BaseMeasurement):
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(measurement_times)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
 
     def _quantum_circuit(self,
@@ -391,14 +530,14 @@ class T2_RamseyMeasurement(BaseMeasurement):
             
             damped_oscillation_fit = None
             best_bic = np.inf
-            for fit_trial_idx in range(20):
+            for fit_trial_idx in range(30):
                 damped_osc_model = Model(damped_osc_func)
                 damped_osc_params = damped_osc_model.make_params(
                     tau = np.random.uniform(0.2, 2) * measurement_times[-1],
                     frequency= np.random.uniform(0.5, 1.5) * artificial_detuning,
-                    phase=0.0,
+                    phase=np.random.uniform(-1.0, 1.0) * np.pi,
                     amplitude=0.5*(max(probabilities_excited) - min(probabilities_excited)),
-                    offset=0.5
+                    offset=np.random.uniform(0.8, 1.2)*0.5
                 )
                 damped_osc_params['tau'].vary, damped_osc_params['tau'].min, damped_osc_params['tau'].max = (
                     True, 0, 5*measurement_times[-1])
@@ -426,7 +565,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
 
             double_damped_oscillation_fit = None
             best_bic = np.inf
-            for fit_trial_idx in range(20):
+            for fit_trial_idx in range(30):
                 double_damped_osc_model = Model(double_damped_osc_func)
                 double_damped_osc_params = double_damped_osc_model.make_params(
                     tau_1 = np.random.uniform(0.2, 2) * measurement_times[-1],
@@ -471,23 +610,25 @@ class T2_RamseyMeasurement(BaseMeasurement):
             return double_damped_oscillation_fit
         
         self.T2_ramsey_values = {}
-        ro_corrected_probs_per_n_qubits = self.ro_corrected_probs_per_n_qubits
+        ro_corrected_probs_per_n_qubits = self.result_probs_per_n_qubits
         probabilities_excited_per_n_qubits = []
-        damped_osc_curves = []
-        double_damped_osc_curves = []
-        tau_fits = []
-        tau_1_fits = []
-        tau_2_fits = []
-        frequency_1_fits = []
-        frequency_2_fits = []
+        artificial_detunings = {'original': self.artificial_detunings.copy(),
+                                'minus': self.artificial_detunings.copy(),
+                                'plus': self.artificial_detunings.copy()}
+        damped_osc_curves = {'original': [], 'minus': [], 'plus': []}
+        double_damped_osc_curves = {'original': [], 'minus': [], 'plus': []}
+        tau_fits = {'original': [], 'minus': [], 'plus': []}
+        tau_1_fits = {'original': [], 'minus': [], 'plus': []}
+        tau_2_fits = {'original': [], 'minus': [], 'plus': []}
+        frequency_1_fits = {'original': [], 'minus': [], 'plus': []}
+        frequency_2_fits = {'original': [], 'minus': [], 'plus': []}
+        fit_bics = {'single_beating': [], 'double_beating': [], 'single_minus': [], 'single_plus': []}
         xf_data_per_n_qubits = []
         fft_data_amplitude_per_n_qubits = []
         xf_fit_per_n_qubits = []
         fft_fit_amplitude_per_n_qubits = []
         peak_freqs_per_n_qubits = []
         peak_amps_per_n_qubits = []
-        artificial_detunings_plus = self.artificial_detunings
-        artificial_detunings_minus = self.artificial_detunings
         fitted_double_osc_pass = [False for qubit_idx in range(len(self.qubit_list))]
 
         
@@ -497,10 +638,10 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                      for entry in range(len(measurement_times))]
             probabilities_excited_per_n_qubits.append(probabilities_excited)
 
-            # Iterate 20 times for best fit
+            # Iterate 30 times for best fit
             damped_oscillation_fit = fit_dumped_osc_function(measurement_times,
                                                              probabilities_excited,
-                                                             self.artificial_detunings[qubit_idx])
+                                                             artificial_detunings['original'][qubit_idx])
             tau_fit, frequency_fit, phase_fit, amplitude_fit, offset_fit = (damped_oscillation_fit.params['tau'].value,
                 damped_oscillation_fit.params['frequency'].value, damped_oscillation_fit.params['phase'].value,
                 damped_oscillation_fit.params['amplitude'].value, damped_oscillation_fit.params['offset'].value)
@@ -509,14 +650,14 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                                 num = 2001)
             damped_oscillation_curve = damped_osc_func(measurement_times_fit, tau_fit, frequency_fit,
                                                        phase_fit, amplitude_fit, offset_fit)
-            tau_fits.append(tau_fit)
-            damped_osc_curves.append(damped_oscillation_curve)
-            self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit
+            tau_fits['original'].append(tau_fit)
+            damped_osc_curves['original'].append(damped_oscillation_curve)
+            self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = np.round(1e6 * tau_fit, 1)
 
-            # Iterate 20 times for best fit
+            # Iterate 30 times for best fit
             double_damped_oscillation_fit = fit_double_dumped_osc_function(measurement_times,
                                                                            probabilities_excited,
-                                                                           self.artificial_detunings[qubit_idx])
+                                                                           artificial_detunings['original'][qubit_idx])
             (tau_1_fit, frequency_1_fit, phase_1_fit, amplitude_1_fit,
              tau_2_fit, frequency_2_fit, phase_2_fit, amplitude_2_fit,
              offset_fit) = (
@@ -529,11 +670,11 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                                                      tau_1_fit, frequency_1_fit, phase_1_fit, amplitude_1_fit,
                                                                      tau_2_fit, frequency_2_fit, phase_2_fit, amplitude_2_fit,
                                                                      offset_fit)
-            tau_1_fits.append(tau_1_fit)
-            tau_2_fits.append(tau_2_fit)
-            frequency_1_fits.append(frequency_1_fit)
-            frequency_2_fits.append(frequency_2_fit)
-            double_damped_osc_curves.append(double_damped_oscillation_curve)
+            tau_1_fits['original'].append(tau_1_fit)
+            tau_2_fits['original'].append(tau_2_fit)
+            frequency_1_fits['original'].append(frequency_1_fit)
+            frequency_2_fits['original'].append(frequency_2_fit)
+            double_damped_osc_curves['original'].append(double_damped_oscillation_curve)
 
             pad_N = 5000
             N_data = len(measurement_times)
@@ -569,6 +710,8 @@ class T2_RamseyMeasurement(BaseMeasurement):
             peak_amps_per_n_qubits.append(peak_amps)
             print(peaks)
 
+            fit_bics['single_beating'].append(damped_oscillation_fit.bic)
+            fit_bics['double_beating'].append(double_damped_oscillation_fit.bic)
             print(damped_oscillation_fit.bic, double_damped_oscillation_fit.bic)
             bic_avg = (damped_oscillation_fit.bic+double_damped_oscillation_fit.bic) /2
             bic_diff = np.abs(damped_oscillation_fit.bic-double_damped_oscillation_fit.bic) / np.abs(bic_avg)
@@ -576,37 +719,54 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                                 # more than 1 peaks have been detected in the FFT
                 print(f'Pass for qubit Q{qubit_idx}.')
                 fitted_double_osc_pass[qubit_idx] = True
-                original_detuning = self.artificial_detunings[qubit_idx]
+                original_detuning = artificial_detunings['original'][qubit_idx].copy()
                 f1 = frequency_1_fit
                 f2 = frequency_2_fit
-                artificial_detunings_minus[qubit_idx] = original_detuning - (f1+f2)/2
-                artificial_detunings_plus[qubit_idx] = original_detuning + (f1+f2)/2
+                artificial_detunings['minus'][qubit_idx] = original_detuning - (f1+f2)/2
+                artificial_detunings['plus'][qubit_idx] = original_detuning + (f1+f2)/2
 
-        qc = self._quantum_circuit(backend=self.backend,
+        double_beating_labels = []
+        for qubit_idx in range(len(self.qubit_list)):
+            if fitted_double_osc_pass[qubit_idx] == True:
+                double_beating_labels.append(f"Q{qubit_idx}")
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              "Detected double beating for qubits "
+              f"{double_beating_labels}.")
+        qc_minus = self._quantum_circuit(backend=self.backend,
                                     qubit_list=self.qubit_list,
                                     measurement_times=measurement_times,
-                                    artificial_detunings=artificial_detunings_minus)
+                                    artificial_detunings=artificial_detunings['minus'])
+        qc_plus = self._quantum_circuit(backend=self.backend,
+                                    qubit_list=self.qubit_list,
+                                    measurement_times=measurement_times,
+                                    artificial_detunings=artificial_detunings['plus'])
         super().__init__(backend=self.backend,
                             qubit_list=self.qubit_list,
-                            qc=qc,
+                            qc=[qc_minus, qc_plus],
                             num_shots=self.num_shots,
                             store_record=True)                      
         for qubit_idx in range(len(self.qubit_list)):
                 
             if fitted_double_osc_pass[qubit_idx] == True:
+                
+                config = ['minus', 'plus']
+                multi_probabilities_excited = {}
+                for idx in range(2):
 
-                probabilities_excited_new = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
-                                             for entry in range(len(measurement_times))]
-                damped_oscillation_fit_new = fit_dumped_osc_function(measurement_times,
-                                                                     probabilities_excited_new,
-                                                                     artificial_detunings_minus[qubit_idx])
-                tau_fit_new, frequency_fit_new, phase_fit_new, amplitude_fit_new, offset_fit_new = (
-                    damped_oscillation_fit_new.params['tau'].value,
-                    damped_oscillation_fit_new.params['frequency'].value, damped_oscillation_fit_new.params['phase'].value,
-                    damped_oscillation_fit_new.params['amplitude'].value, damped_oscillation_fit_new.params['offset'].value)
-                damped_oscillation_curve_new = damped_osc_func(measurement_times_fit, tau_fit_new, frequency_fit_new,
-                                                        phase_fit_new, amplitude_fit_new, offset_fit_new)
-                self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = 1e6 * tau_fit_new
+                    probabilities_excited_new = [self.result_multi_probs_per_n_qubits[idx][qubit_idx][entry]['1'] \
+                                                for entry in range(len(measurement_times))]
+                    multi_probabilities_excited[config[idx]] = probabilities_excited_new
+                    damped_oscillation_fit_new = fit_dumped_osc_function(measurement_times,
+                                                                        probabilities_excited_new,
+                                                                        artificial_detunings[config[idx]][qubit_idx])
+                    tau_fits[config[idx]], frequency_fits, phase_fit_new, amplitude_fit_new, offset_fit_new = (
+                        damped_oscillation_fit_new.params['tau'].value,
+                        damped_oscillation_fit_new.params['frequency'].value, damped_oscillation_fit_new.params['phase'].value,
+                        damped_oscillation_fit_new.params['amplitude'].value, damped_oscillation_fit_new.params['offset'].value)
+                    damped_osc_curves[config[idx]] = damped_osc_func(measurement_times_fit, tau_fits[config[idx]], frequency_fits,
+                                                            phase_fit_new, amplitude_fit_new, offset_fit_new)
+                    fit_bics[f'single_{config[idx]}'].append(damped_oscillation_fit_new.bic)
 
                 fig, axes = plt.subplot_mosaic(
                             [
@@ -630,7 +790,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
             for ax_obj in [ax_all, ax]:
                 ax_obj.plot(1e6*measurement_times,
                         probabilities_excited_per_n_qubits[qubit_idx],
-                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fits[qubit_idx]:.1f} μs',
+                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fits['original'][qubit_idx]:.1f} μs',
                         alpha=0.6,
                         color = f'C{qubit_idx}',
                         marker='o')
@@ -638,22 +798,23 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_ylim(-0.05, 1.05)
             ax.plot(1e6*measurement_times_fit,
-                        damped_osc_curves[qubit_idx],
+                        damped_osc_curves['original'][qubit_idx],
                         alpha=0.7,
                         color = 'red',
                         label = 'fit')
             if fitted_double_osc_pass[qubit_idx] == True: # if bic difference is larger than 22%
                 ax.plot(1e6*measurement_times_fit,
-                            double_damped_osc_curves[qubit_idx],
+                            double_damped_osc_curves['original'][qubit_idx],
                             alpha=0.7,
                             color = 'green',
                             label = 'double fit')
                 ax.plot([], [], ' ', label=' ')
-                ax.plot([], [], ' ', label=f'Double fit 1 frequency: {frequency_1_fits[qubit_idx]:.1f} Hz')
-                ax.plot([], [], ' ', label=f'Double fit 1 T2: {1e6 * tau_1_fits[qubit_idx]:.1f} μs')
-                ax.plot([], [], ' ', label=f'Double fit 2 frequency: {frequency_2_fits[qubit_idx]:.1f} Hz')
-                ax.plot([], [], ' ', label=f'Double fit 2 T2: {1e6 * tau_2_fits[qubit_idx]:.1f} μs')
-                ax.legend(loc='center left', bbox_to_anchor=(-1, 0.75))
+                ax.plot([], [], ' ', label=f'Double fit 1 frequency: {frequency_1_fits['original'][qubit_idx]:.1f} Hz')
+                ax.plot([], [], ' ', label=f'Double fit 1 T2: {1e6 * tau_1_fits['original'][qubit_idx]:.1f} μs')
+                ax.plot([], [], ' ', label=f'Double fit 2 frequency: {frequency_2_fits['original'][qubit_idx]:.1f} Hz')
+                ax.plot([], [], ' ', label=f'Double fit 2 T2: {1e6 * tau_2_fits['original'][qubit_idx]:.1f} μs')
+                ax.set_title("Initial measurement")
+                ax.legend(loc='center left', bbox_to_anchor=(-0.9, 0.75))
 
                 ax1.plot(xf_data_per_n_qubits[qubit_idx],
                          fft_data_amplitude_per_n_qubits[qubit_idx],
@@ -667,12 +828,12 @@ class T2_RamseyMeasurement(BaseMeasurement):
                         label=f'{self.qubit_labels[qubit_idx]} fit',
                         alpha=0.6,
                         color='green')
-                ax1.axvline(frequency_1_fits[qubit_idx],
+                ax1.axvline(frequency_1_fits['original'][qubit_idx],
                         label='Double fit 1 freq',
                         linestyle = '--',
                         linewidth = 1.2,
                         alpha = 0.6)
-                ax1.axvline(frequency_2_fits[qubit_idx],
+                ax1.axvline(frequency_2_fits['original'][qubit_idx],
                         label='Double fit 2 freq',
                         linestyle='--',
                         linewidth = 1.2,
@@ -688,26 +849,35 @@ class T2_RamseyMeasurement(BaseMeasurement):
                             label='Detected peaks',
                             zorder=10
                         )
+                ax1.set_title("FFT of initial measurement data")
                 ax1.set_xlabel("Frequency (Hz)")
                 ax1.set_ylabel("Amplitude")
                 ax1.set_xlim(0, xf_data[-1]) # restrict frequency values to those of the data
-                ax1.legend()
+                ax1.legend(loc='center right', bbox_to_anchor=(1.5, 0.85))
 
+                markers = {'minus': 's', 'plus': 'x'}
+                colors = {'minus': 'red', 'plus': 'purple'}
+                if fit_bics['single_minus'] < fit_bics['single_minus']:
+                    config = 'minus'
+                else: config = 'plus'
+                self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = np.round(1e6 * tau_fits[config], 1)
+                
                 ax2.plot(1e6*measurement_times,
-                        probabilities_excited_new,
-                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fit_new:.1f} μs',
+                        multi_probabilities_excited[config],
+                        label=f'{self.qubit_labels[qubit_idx]} ({config}): T2* = {1e6 * tau_fits[config]:.1f} μs',
                         alpha=0.6,
                         color = f'C{qubit_idx}',
-                        marker='o')
+                        marker=markers[config])
+                ax2.plot(1e6*measurement_times_fit,
+                        damped_osc_curves[config],
+                        alpha=0.7,
+                        color = colors[config],
+                        label = 'fit')
+                ax2.set_title('Final measurement')
                 ax2.set_xlabel('Time (μs)')
                 ax2.set_ylabel(r'Population $|1\rangle$')
                 ax2.set_ylim(-0.05, 1.05)
-                ax2.plot(1e6*measurement_times_fit,
-                        damped_oscillation_curve_new,
-                        alpha=0.7,
-                        color = 'red',
-                        label = 'fit')
-                ax2.legend()
+                ax2.legend(loc='center left', bbox_to_anchor=(-0.34, 0.85))
             else:
                 ax.set_title(
                 f'T2 echo measurement'
@@ -736,10 +906,10 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
-        self.experiment_data["Artificial detunings [Hz]"] = self.artificial_detunings
-        self.experiment_data["Artificial detunings minus [Hz]"] = artificial_detunings_minus
-        self.experiment_data["Artificial detunings plus [Hz]"] = artificial_detunings_plus
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Artificial detunings [Hz]"] = artificial_detunings['original']
+        self.experiment_data["Artificial detunings minus [Hz]"] = artificial_detunings['minus']
+        self.experiment_data["Artificial detunings plus [Hz]"] = artificial_detunings['plus']
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T2 Ramsey values"] = self.T2_ramsey_values
         json_file_path = (
@@ -758,6 +928,7 @@ class T2_EchoMeasurement(BaseMeasurement):
                  measurement_times: np.array,
                  num_shots: int,
                  artificial_detuning: float = None,
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         """
         Args:
@@ -775,9 +946,16 @@ class T2_EchoMeasurement(BaseMeasurement):
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(measurement_times)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
 
     def _quantum_circuit(self,
@@ -852,7 +1030,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             p0 = [
                     measurement_times[-1] / 2,
@@ -918,7 +1096,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Artificial detuning [Hz]"] = self.artificial_detuning
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T2 echo values"] = self.T2_echo_values
         json_file_path = (
@@ -938,6 +1116,7 @@ class FlippingMeasurement(BaseMeasurement):
                  equator: bool = True,
                  rotation_axis: str = 'x', # 'x' or 'y'
                  rotation_angle: str = '180', # '180' or '90'
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         """
         Args:
@@ -965,9 +1144,16 @@ class FlippingMeasurement(BaseMeasurement):
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(number_of_flips)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
     def _quantum_circuit(self,
                          backend,
@@ -1027,7 +1213,7 @@ class FlippingMeasurement(BaseMeasurement):
 
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                     for entry in range(len(number_of_flips))]
 
             linear_model = Model(linear_func)
@@ -1135,7 +1321,7 @@ class FlippingMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["Flipping parameters"] = self.flipping_parameters
         json_file_path = (
@@ -1152,6 +1338,7 @@ class AllXYMeasurement(BaseMeasurement):
                  backend,
                  qubit_list: list,
                  num_shots: int,
+                 use_ro_cal_points: bool = True,
                  directory: str = None):
         
         qc = self._quantum_circuit(backend,
@@ -1161,9 +1348,16 @@ class AllXYMeasurement(BaseMeasurement):
                          qubit_list=qubit_list,
                          qc=qc,
                          num_shots=num_shots,
+                         use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis()
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
     def _quantum_circuit(self,
                          backend,
@@ -1224,7 +1418,7 @@ class AllXYMeasurement(BaseMeasurement):
 
         fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [self.ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [self.result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(2*len(AllXY_syndrome_labels))]
             
             ideal_data = np.concatenate((0 * np.ones(10), 0.5 * np.ones(24),
@@ -1285,7 +1479,7 @@ class AllXYMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Number of shots"] = self.num_shots
-        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.ro_corrected_probs_per_n_qubits[qubit_idx] \
+        self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["AllXY deviations"] = self.allxy_deviations
         json_file_path = (
@@ -1303,6 +1497,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
                 num_shots: int,
                 num_angles: int = 19,
                 cz_repetitions: int = 1,
+                use_ro_cal_points: bool = True,
                 directory: str = None):
         
         qubit_list = []
@@ -1323,13 +1518,20 @@ class ConditionalOscMeasurement(BaseMeasurement):
                         qubit_list=qubit_list,
                         qc=qc,
                         num_shots=num_shots,
+                        use_ro_cal_points=use_ro_cal_points,
                         n_qubit_routine=2,
                         qubit_groups = qubit_pairs,
                         directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(qubit_pairs,
                             angles,
                             cz_repetitions)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
 
     def _quantum_circuit(self,
@@ -1387,7 +1589,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
 
         for qubit_pair_idx in range(len(qubit_pairs)):
 
-            probs = self.ro_corrected_probs_per_n_qubits[qubit_pair_idx]
+            probs = self.result_probs_per_n_qubits[qubit_pair_idx]
             probs_per_qubit = self._collect_data_per_n_qubits(probs)
 
             q_targ_off = probs_per_qubit[0][0:int(len(probs_per_qubit[0])/2)]
@@ -1573,6 +1775,7 @@ class BellStateMeasurement(BaseMeasurement):
                 qubit_pairs: list[list[int]],
                 bell_state: str,
                 num_shots: int,
+                use_ro_cal_points: bool = True,
                 directory: str = None):
         
         if bell_state not in ["phi_plus", "phi_minus",
@@ -1601,12 +1804,19 @@ class BellStateMeasurement(BaseMeasurement):
                         qubit_list=qubit_list,
                         qc=qc,
                         num_shots=num_shots,
+                        use_ro_cal_points=use_ro_cal_points,
                         n_qubit_routine=2,
                         qubit_groups = qubit_pairs,
                         directory=directory)
         
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Analyzing processed data ...")
         self._data_analysis(qubit_pairs,
                             bell_state)
+        timestamp_now = datetime.now().replace(microsecond=0)
+        print(f"[{timestamp_now}] "
+              f"Data analysis complete!")
         
 
     def _quantum_circuit(self,
@@ -1693,7 +1903,7 @@ class BellStateMeasurement(BaseMeasurement):
             for pauli_term_idx in range(len(self.tomography_bases)):
                 pauli_term = self.tomography_bases[pauli_term_idx]
                 pauli_term_in_Z = translate_to_Z_basis(pauli_term)
-                tomography_dict[pauli_term] = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
+                tomography_dict[pauli_term] = observable_expectation_values_Z_basis([self.result_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
                                                                         pauli_term_in_Z)[0]
                 
             for sq_pauli_term_idx in range(len(self.single_qubit_terms)):
@@ -1706,7 +1916,7 @@ class BellStateMeasurement(BaseMeasurement):
                     pauli_term = self.tomography_bases[pauli_term_idx]
                     if sq_pauli_term_stripped == pauli_term[sq_pauli_term_idx]:
                         sq_pauli_term_in_Z = translate_to_Z_basis(sq_pauli_term)
-                        expectation_value = observable_expectation_values_Z_basis([self.ro_corrected_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
+                        expectation_value = observable_expectation_values_Z_basis([self.result_probs_per_n_qubits[qubit_pair_idx][pauli_term_idx]],
                                                                                                 sq_pauli_term_in_Z)[0]
                         tomography_value += expectation_value
                         num_expectation_values += 1
