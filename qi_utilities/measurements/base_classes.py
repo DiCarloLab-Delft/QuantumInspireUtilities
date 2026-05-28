@@ -118,6 +118,7 @@ class BaseMeasurement:
             if len(result.results) > 1:
                 for circuit_idx in range(len(result.results)):
                     self._extract_data(result,
+                                       use_ro_cal_points,
                                        qubit_groups,
                                        n_qubit_routine,
                                        check_for_multi_result=False,

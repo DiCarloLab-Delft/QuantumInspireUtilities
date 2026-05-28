@@ -610,13 +610,18 @@ class T2_RamseyMeasurement(BaseMeasurement):
             return double_damped_oscillation_fit
         
         self.T2_ramsey_values = {}
-        ro_corrected_probs_per_n_qubits = self.result_probs_per_n_qubits
+        bic_diff_tolerance = 0.10
+        result_probs_per_n_qubits = self.result_probs_per_n_qubits
         probabilities_excited_per_n_qubits = []
         artificial_detunings = {'original': self.artificial_detunings.copy(),
                                 'minus': self.artificial_detunings.copy(),
                                 'plus': self.artificial_detunings.copy()}
         damped_osc_curves = {'original': [], 'minus': [], 'plus': []}
         double_damped_osc_curves = {'original': [], 'minus': [], 'plus': []}
+        damped_osc_fits = {'minus': [], 'plus': []}
+        double_damped_osc_fits = {'minus': [], 'plus': []}
+        bic_avgs = {'minus': [], 'plus': []}
+        bic_diffs = {'minus': [], 'plus': []}
         tau_fits = {'original': [], 'minus': [], 'plus': []}
         tau_1_fits = {'original': [], 'minus': [], 'plus': []}
         tau_2_fits = {'original': [], 'minus': [], 'plus': []}
@@ -631,10 +636,8 @@ class T2_RamseyMeasurement(BaseMeasurement):
         peak_amps_per_n_qubits = []
         fitted_double_osc_pass = [False for qubit_idx in range(len(self.qubit_list))]
 
-        
-        fig_all, ax_all = plt.subplots(dpi=300)
         for qubit_idx in range(len(self.qubit_list)):
-            probabilities_excited = [ro_corrected_probs_per_n_qubits[qubit_idx][entry]['1'] \
+            probabilities_excited = [result_probs_per_n_qubits[qubit_idx][entry]['1'] \
                                      for entry in range(len(measurement_times))]
             probabilities_excited_per_n_qubits.append(probabilities_excited)
 
@@ -708,16 +711,13 @@ class T2_RamseyMeasurement(BaseMeasurement):
             peak_amps = fft_data_amplitude[peaks]
             peak_freqs_per_n_qubits.append(peak_freqs)
             peak_amps_per_n_qubits.append(peak_amps)
-            print(peaks)
 
             fit_bics['single_beating'].append(damped_oscillation_fit.bic)
             fit_bics['double_beating'].append(double_damped_oscillation_fit.bic)
-            print(damped_oscillation_fit.bic, double_damped_oscillation_fit.bic)
             bic_avg = (damped_oscillation_fit.bic+double_damped_oscillation_fit.bic) /2
             bic_diff = np.abs(damped_oscillation_fit.bic-double_damped_oscillation_fit.bic) / np.abs(bic_avg)
-            if bic_diff > 0.22 or len(peaks)>1: # if bic difference is larger than 22% or
+            if bic_diff > bic_diff_tolerance or len(peaks)>1: # if bic difference is larger than 22% or
                                                 # more than 1 peaks have been detected in the FFT
-                print(f'Pass for qubit Q{qubit_idx}.')
                 fitted_double_osc_pass[qubit_idx] = True
                 original_detuning = artificial_detunings['original'][qubit_idx].copy()
                 f1 = frequency_1_fit
@@ -725,31 +725,33 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 artificial_detunings['minus'][qubit_idx] = original_detuning - (f1+f2)/2
                 artificial_detunings['plus'][qubit_idx] = original_detuning + (f1+f2)/2
 
-        double_beating_labels = []
-        for qubit_idx in range(len(self.qubit_list)):
+        if len(fitted_double_osc_pass) != 0:
+            double_beating_labels = []
+            for qubit_idx in range(len(self.qubit_list)):
+                if fitted_double_osc_pass[qubit_idx] == True:
+                    double_beating_labels.append(f"Q{qubit_idx}")
+            timestamp_now = datetime.now().replace(microsecond=0)
+            print(f"[{timestamp_now}] "
+                "Detected double beating for qubits "
+                f"{double_beating_labels}.")
+            qc_minus = self._quantum_circuit(backend=self.backend,
+                                        qubit_list=self.qubit_list,
+                                        measurement_times=measurement_times,
+                                        artificial_detunings=artificial_detunings['minus'])
+            qc_plus = self._quantum_circuit(backend=self.backend,
+                                        qubit_list=self.qubit_list,
+                                        measurement_times=measurement_times,
+                                        artificial_detunings=artificial_detunings['plus'])
+            print(f"[{timestamp_now}] "
+                "Re-launching the measurement routine with adjusted artificial detunings to get rid of the double beating(s) ... ")
+            super().__init__(backend=self.backend,
+                                qubit_list=self.qubit_list,
+                                qc=[qc_minus, qc_plus],
+                                num_shots=self.num_shots,
+                                store_record=True)   
+                               
+        for qubit_idx in range(len(self.qubit_list)):    
             if fitted_double_osc_pass[qubit_idx] == True:
-                double_beating_labels.append(f"Q{qubit_idx}")
-        timestamp_now = datetime.now().replace(microsecond=0)
-        print(f"[{timestamp_now}] "
-              "Detected double beating for qubits "
-              f"{double_beating_labels}.")
-        qc_minus = self._quantum_circuit(backend=self.backend,
-                                    qubit_list=self.qubit_list,
-                                    measurement_times=measurement_times,
-                                    artificial_detunings=artificial_detunings['minus'])
-        qc_plus = self._quantum_circuit(backend=self.backend,
-                                    qubit_list=self.qubit_list,
-                                    measurement_times=measurement_times,
-                                    artificial_detunings=artificial_detunings['plus'])
-        super().__init__(backend=self.backend,
-                            qubit_list=self.qubit_list,
-                            qc=[qc_minus, qc_plus],
-                            num_shots=self.num_shots,
-                            store_record=True)                      
-        for qubit_idx in range(len(self.qubit_list)):
-                
-            if fitted_double_osc_pass[qubit_idx] == True:
-                
                 config = ['minus', 'plus']
                 multi_probabilities_excited = {}
                 for idx in range(2):
@@ -757,16 +759,26 @@ class T2_RamseyMeasurement(BaseMeasurement):
                     probabilities_excited_new = [self.result_multi_probs_per_n_qubits[idx][qubit_idx][entry]['1'] \
                                                 for entry in range(len(measurement_times))]
                     multi_probabilities_excited[config[idx]] = probabilities_excited_new
-                    damped_oscillation_fit_new = fit_dumped_osc_function(measurement_times,
-                                                                        probabilities_excited_new,
-                                                                        artificial_detunings[config[idx]][qubit_idx])
-                    tau_fits[config[idx]], frequency_fits, phase_fit_new, amplitude_fit_new, offset_fit_new = (
-                        damped_oscillation_fit_new.params['tau'].value,
-                        damped_oscillation_fit_new.params['frequency'].value, damped_oscillation_fit_new.params['phase'].value,
-                        damped_oscillation_fit_new.params['amplitude'].value, damped_oscillation_fit_new.params['offset'].value)
-                    damped_osc_curves[config[idx]] = damped_osc_func(measurement_times_fit, tau_fits[config[idx]], frequency_fits,
-                                                            phase_fit_new, amplitude_fit_new, offset_fit_new)
-                    fit_bics[f'single_{config[idx]}'].append(damped_oscillation_fit_new.bic)
+                    damped_osc_fits[config[idx]] = fit_dumped_osc_function(measurement_times,
+                                                                          probabilities_excited_new,
+                                                                          artificial_detunings[config[idx]][qubit_idx])
+                    double_damped_osc_fits[config[idx]] = fit_double_dumped_osc_function(measurement_times,
+                                                                                         probabilities_excited_new,
+                                                                                         artificial_detunings[config[idx]][qubit_idx])
+                    bic_avgs[config[idx]] = (damped_osc_fits[config[idx]].bic+double_damped_osc_fits[config[idx]].bic) /2
+                    bic_diffs[config[idx]] = np.abs(damped_osc_fits[config[idx]].bic-double_damped_osc_fits[config[idx]].bic) \
+                                            / np.abs(bic_avg)
+
+                if bic_diffs['minus'] < bic_diffs['plus']:
+                    winning_config = 'minus'
+                else: winning_config = 'plus'
+                tau_fits[winning_config], frequency_fits, phase_fit_new, amplitude_fit_new, offset_fit_new = (
+                damped_osc_fits[winning_config].params['tau'].value, damped_osc_fits[winning_config].params['frequency'].value,
+                damped_osc_fits[winning_config].params['phase'].value, damped_osc_fits[winning_config].params['amplitude'].value,
+                damped_osc_fits[winning_config].params['offset'].value)
+                damped_osc_curve = damped_osc_func(measurement_times_fit, tau_fits[winning_config], frequency_fits,
+                                                    phase_fit_new, amplitude_fit_new, offset_fit_new)
+                self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = np.round(1e6 * tau_fits[winning_config], 1)
 
                 fig, axes = plt.subplot_mosaic(
                             [
@@ -787,32 +799,32 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 )
             else:
                 fig, ax = plt.subplots(dpi=300)
-            for ax_obj in [ax_all, ax]:
-                ax_obj.plot(1e6*measurement_times,
-                        probabilities_excited_per_n_qubits[qubit_idx],
-                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fits['original'][qubit_idx]:.1f} μs',
-                        alpha=0.6,
-                        color = f'C{qubit_idx}',
-                        marker='o')
-                ax_obj.set_xlabel('Time (μs)')
-                ax_obj.set_ylabel(r'Population $|1\rangle$')
-                ax_obj.set_ylim(-0.05, 1.05)
+            ax.plot(1e6*measurement_times,
+                    probabilities_excited_per_n_qubits[qubit_idx],
+                    label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fits['original'][qubit_idx]:.1f} μs',
+                    alpha=0.6,
+                    color = f'C{qubit_idx}',
+                    marker='o')
+            ax.set_xlabel('Time (μs)')
+            ax.set_ylabel(r'Population $|1\rangle$')
+            ax.set_ylim(-0.05, 1.05)
             ax.plot(1e6*measurement_times_fit,
                         damped_osc_curves['original'][qubit_idx],
                         alpha=0.7,
                         color = 'red',
-                        label = 'fit')
-            if fitted_double_osc_pass[qubit_idx] == True: # if bic difference is larger than 22%
+                        label = 'Single oscillation fit')
+            if fitted_double_osc_pass[qubit_idx] == True:
                 ax.plot(1e6*measurement_times_fit,
                             double_damped_osc_curves['original'][qubit_idx],
                             alpha=0.7,
                             color = 'green',
-                            label = 'double fit')
+                            label = 'Double oscillation fit')
                 ax.plot([], [], ' ', label=' ')
-                ax.plot([], [], ' ', label=f'Double fit 1 frequency: {frequency_1_fits['original'][qubit_idx]:.1f} Hz')
-                ax.plot([], [], ' ', label=f'Double fit 1 T2: {1e6 * tau_1_fits['original'][qubit_idx]:.1f} μs')
-                ax.plot([], [], ' ', label=f'Double fit 2 frequency: {frequency_2_fits['original'][qubit_idx]:.1f} Hz')
-                ax.plot([], [], ' ', label=f'Double fit 2 T2: {1e6 * tau_2_fits['original'][qubit_idx]:.1f} μs')
+                ax.plot([], [], ' ', label=f'Artificial detuning ' + r'$f = $' + f'{artificial_detunings['original'][qubit_idx]:.1f} Hz')
+                ax.plot([], [], ' ', label=f'Double osc. fit ' + r'$f_1 = $' + f'{frequency_1_fits['original'][qubit_idx]:.1f} Hz')
+                ax.plot([], [], ' ', label=f'Double osc. fit ' + r'$f_2 = $' + f'{frequency_2_fits['original'][qubit_idx]:.1f} Hz')
+                ax.plot([], [], ' ', label=f'Double osc. fit ' + r'$T_2^{* (1)} = $' + f'{1e6 * tau_1_fits['original'][qubit_idx]:.1f} μs')
+                ax.plot([], [], ' ', label=f'Double osc. fit ' + r'$T_2^{* (2)} = $' + f'{1e6 * tau_2_fits['original'][qubit_idx]:.1f} μs')
                 ax.set_title("Initial measurement")
                 ax.legend(loc='center left', bbox_to_anchor=(-0.9, 0.75))
 
@@ -825,19 +837,21 @@ class T2_RamseyMeasurement(BaseMeasurement):
                         markersize=0.5)
                 ax1.plot(xf_fit_per_n_qubits[qubit_idx],
                          fft_fit_amplitude_per_n_qubits[qubit_idx],
-                        label=f'{self.qubit_labels[qubit_idx]} fit',
+                        label=f'{self.qubit_labels[qubit_idx]} double osc. fit',
                         alpha=0.6,
                         color='green')
                 ax1.axvline(frequency_1_fits['original'][qubit_idx],
-                        label='Double fit 1 freq',
+                        label='Double osc. fit ' + r'$f_1$',
                         linestyle = '--',
                         linewidth = 1.2,
-                        alpha = 0.6)
+                        alpha = 0.7,
+                        color='black')
                 ax1.axvline(frequency_2_fits['original'][qubit_idx],
-                        label='Double fit 2 freq',
+                        label='Double osc. fit ' + r'$f_2$',
                         linestyle='--',
                         linewidth = 1.2,
-                        alpha = 0.6)
+                        alpha = 0.9,
+                        color='orange')
                 ax1.scatter(
                             peak_freqs_per_n_qubits[qubit_idx],
                             peak_amps_per_n_qubits[qubit_idx],
@@ -846,38 +860,39 @@ class T2_RamseyMeasurement(BaseMeasurement):
                             color='orange',
                             edgecolors='black',
                             linewidths=1.5,
-                            label='Detected peaks',
+                            label=f'Detected peaks (on {self.qubit_labels[qubit_idx]} data)',
                             zorder=10
                         )
                 ax1.set_title("FFT of initial measurement data")
                 ax1.set_xlabel("Frequency (Hz)")
                 ax1.set_ylabel("Amplitude")
                 ax1.set_xlim(0, xf_data[-1]) # restrict frequency values to those of the data
-                ax1.legend(loc='center right', bbox_to_anchor=(1.5, 0.85))
+                ax1.legend(loc='center right', bbox_to_anchor=(1.65, 0.85))
 
                 markers = {'minus': 's', 'plus': 'x'}
                 colors = {'minus': 'red', 'plus': 'purple'}
-                if fit_bics['single_minus'] < fit_bics['single_minus']:
-                    config = 'minus'
-                else: config = 'plus'
-                self.T2_ramsey_values[f'{self.qubit_labels[qubit_idx]} [us]'] = np.round(1e6 * tau_fits[config], 1)
-                
+                sign = {'minus': '-', 'plus': '+'}
                 ax2.plot(1e6*measurement_times,
-                        multi_probabilities_excited[config],
-                        label=f'{self.qubit_labels[qubit_idx]} ({config}): T2* = {1e6 * tau_fits[config]:.1f} μs',
+                        multi_probabilities_excited[winning_config],
+                        label=f'{self.qubit_labels[qubit_idx]}: T2* = {1e6 * tau_fits[winning_config]:.1f} μs',
                         alpha=0.6,
                         color = f'C{qubit_idx}',
-                        marker=markers[config])
+                        marker=markers[winning_config])
                 ax2.plot(1e6*measurement_times_fit,
-                        damped_osc_curves[config],
+                        damped_osc_curve,
                         alpha=0.7,
-                        color = colors[config],
-                        label = 'fit')
-                ax2.set_title('Final measurement')
+                        color = colors[winning_config],
+                        label = 'Single oscillation fit')
+                ax2.plot([], [], ' ', label=' ')
+                ax2.plot([], [], ' ', label=f'Artificial detuning: ' + r"$f' = $" + f'{artificial_detunings[winning_config][qubit_idx]:.1f} Hz')
+                ax2.plot([], [], ' ', label=' ')
+                ax2.plot([], [], ' ', label=f'Artificial detuning adjustment:')
+                ax2.plot([], [], ' ', label=r"$f' = f$"+f'{sign[winning_config]}'+r'$(f_1+f_2)/2$')
+                ax2.set_title('Final measurement with adjusted artificial detuning')
                 ax2.set_xlabel('Time (μs)')
                 ax2.set_ylabel(r'Population $|1\rangle$')
                 ax2.set_ylim(-0.05, 1.05)
-                ax2.legend(loc='center left', bbox_to_anchor=(-0.34, 0.85))
+                ax2.legend(loc='center left', bbox_to_anchor=(-0.43, 0.8))
             else:
                 ax.set_title(
                 f'T2 echo measurement'
@@ -891,15 +906,6 @@ class T2_RamseyMeasurement(BaseMeasurement):
             )
             fig.savefig(T2_ramsey_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
-
-
-        ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        T2_ramsey_all_fig_path = (
-            Path(self.record.project_dir)
-            / f"T2_Ramsey_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
-        )
-        fig_all.savefig(T2_ramsey_all_fig_path, dpi=300, bbox_inches='tight')
-        plt.close(fig_all)
 
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
