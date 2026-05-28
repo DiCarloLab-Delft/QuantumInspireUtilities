@@ -110,7 +110,7 @@ class BaseMeasurement:
                       qubit_groups: list[list] = None,
                       n_qubit_routine: int = 1,
                       check_for_multi_result: bool = True,
-                      circuit_idx: int = 0):
+                      circuit_idx: int = None):
         
         if check_for_multi_result == True:
             self.multi_raw_data_probs_per_n_qubits = []

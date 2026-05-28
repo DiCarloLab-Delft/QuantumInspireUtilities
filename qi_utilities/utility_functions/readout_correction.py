@@ -227,7 +227,7 @@ def extract_ro_assignment_matrices(ro_mitigation_shots: list,
 
     bit_idx = 0
     assignment_probability_matrices = {}
-    for qubit_list in qubit_groups:
+    for qubit_list in qubit_groups[::-1]: # this needs to be reversed!
         register_length = len(qubit_list)*2**len(qubit_list)
         reduced_ro_mitigation_shots = [bitstring[bit_idx:bit_idx+register_length] for bitstring in ro_mitigation_shots]
         num_qubits = len(qubit_list)
@@ -242,6 +242,8 @@ def extract_ro_assignment_matrices(ro_mitigation_shots: list,
         assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix.T
         bit_idx += register_length
 
+    # reverse the order to the original input
+    assignment_probability_matrices = {f"{qubit_list}": assignment_probability_matrices[f"{qubit_list}"] for qubit_list in qubit_groups}
     return assignment_probability_matrices
 
 def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
