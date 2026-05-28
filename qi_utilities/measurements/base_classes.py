@@ -101,7 +101,7 @@ class BaseMeasurement:
                                             silent = True)
             timestamp_now = datetime.now().replace(microsecond=0)
             print(f"[{timestamp_now}] "
-                  f"Job record successfully stored in local directory:\n{self.record.project_dir}")
+                  f"Job record successfully stored in local directory: {self.record.project_dir}")
         return result
         
     def _extract_data(self,
