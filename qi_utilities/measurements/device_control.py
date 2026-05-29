@@ -90,7 +90,6 @@ class DeviceControl:
     def measure_T2_echo(self,
                         qubit_list: list | str,
                         measurement_times: np.array,
-                        artificial_detuning: float = None,
                         num_shots: int = None,
                         use_ro_cal_points: bool = True):
 
@@ -100,7 +99,6 @@ class DeviceControl:
         T2_echo_meas = T2_EchoMeasurement(backend=self.backend,
                                        qubit_list=qubit_list,
                                        measurement_times=measurement_times,
-                                       artificial_detuning=artificial_detuning,
                                        num_shots=self.num_shots,
                                        use_ro_cal_points=use_ro_cal_points,
                                        directory=self.current_directory)
