@@ -15,7 +15,9 @@ class DeviceControl:
         self.T1_values = None
         self.T2_ramsey_values = None
         self.T2_echo_values = None
+        self.flipping_parameters = None
         self.allxy_deviations = None
+        self.cond_osc_params = None
         self.bell_state_fidelities = None
 
     def _check_qubit_list(self,
@@ -36,13 +38,13 @@ class DeviceControl:
                      use_ro_cal_points: bool = True):
         
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         rabi_meas = RabiMeasurement(backend=self.backend,
                                     qubit_list=qubit_list,
                                     rotation_angles=rotation_angles,
                                     rotation_axis=rotation_axis,
-                                    num_shots=self.num_shots,
+                                    num_shots=num_shots,
                                     use_ro_cal_points=use_ro_cal_points,
                                     directory=self.current_directory)
         self.latest_qc = rabi_meas.qc
@@ -56,12 +58,12 @@ class DeviceControl:
                    use_ro_cal_points: bool = True):
 
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         T1_meas = T1_Measurement(backend=self.backend,
                                  qubit_list=qubit_list,
                                  measurement_times=measurement_times,
-                                 num_shots=self.num_shots,
+                                 num_shots=num_shots,
                                  use_ro_cal_points=use_ro_cal_points,
                                  directory=self.current_directory)
         self.latest_qc = T1_meas.qc
@@ -75,12 +77,12 @@ class DeviceControl:
                           use_ro_cal_points: bool = True):
 
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         T2_ramsey_meas = T2_RamseyMeasurement(backend=self.backend,
                                        qubit_list=qubit_list,
                                        measurement_times=measurement_times,
-                                       num_shots=self.num_shots,
+                                       num_shots=num_shots,
                                        use_ro_cal_points=use_ro_cal_points,
                                        directory=self.current_directory)
         self.latest_qc = T2_ramsey_meas.qc
@@ -94,12 +96,12 @@ class DeviceControl:
                         use_ro_cal_points: bool = True):
 
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         T2_echo_meas = T2_EchoMeasurement(backend=self.backend,
                                        qubit_list=qubit_list,
                                        measurement_times=measurement_times,
-                                       num_shots=self.num_shots,
+                                       num_shots=num_shots,
                                        use_ro_cal_points=use_ro_cal_points,
                                        directory=self.current_directory)
         self.latest_qc = T2_echo_meas.qc
@@ -116,15 +118,15 @@ class DeviceControl:
                          use_ro_cal_points: bool = True): # '180' or '90'
         
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         flipping_meas = FlippingMeasurement(backend=self.backend,
                                             qubit_list=qubit_list,
                                             max_number_of_flips=max_number_of_flips,
                                             equator=equator,
                                             rotation_axis=rotation_axis,
                                             rotation_angle=rotation_angle,
-                                            num_shots=self.num_shots,
+                                            num_shots=num_shots,
                                             use_ro_cal_points=use_ro_cal_points,
                                             directory=self.current_directory)
         self.latest_qc = flipping_meas.qc
@@ -137,11 +139,11 @@ class DeviceControl:
                       use_ro_cal_points: bool = True):
         
         qubit_list = self._check_qubit_list(qubit_list)
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         allxy_meas = AllXYMeasurement(backend=self.backend,
                                       qubit_list=qubit_list,
-                                      num_shots=self.num_shots,
+                                      num_shots=num_shots,
                                       use_ro_cal_points=use_ro_cal_points,
                                       directory=self.current_directory)
         self.latest_qc = allxy_meas.qc
@@ -155,13 +157,13 @@ class DeviceControl:
                                         num_shots: int = None,
                                         use_ro_cal_points: bool = True):
         
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         cond_osc_meas = ConditionalOscMeasurement(backend=self.backend,
                                                   qubit_pairs=qubit_pairs,
                                                   num_angles=num_angles,
                                                   cz_repetitions=cz_repetitions,
-                                                  num_shots=self.num_shots,
+                                                  num_shots=num_shots,
                                                   use_ro_cal_points=use_ro_cal_points,
                                                   directory=self.current_directory)
         self.latest_qc = cond_osc_meas.qc
@@ -174,12 +176,12 @@ class DeviceControl:
                                     num_shots: int = None,
                                     use_ro_cal_points: bool = True):
         
-        if num_shots is not None:
-            self.num_shots = num_shots
+        if num_shots is None:
+            num_shots = self.num_shots
         fidelity_meas = BellStateMeasurement(backend=self.backend,
                                              qubit_pairs=qubit_pairs,
                                              bell_state=bell_state,
-                                             num_shots=self.num_shots,
+                                             num_shots=num_shots,
                                              use_ro_cal_points=use_ro_cal_points,
                                              directory=self.current_directory)
         self.latest_qc = fidelity_meas.qc

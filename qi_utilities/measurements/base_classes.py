@@ -1,4 +1,6 @@
+import json
 import numpy as np
+from pathlib import Path
 from datetime import datetime
 from qiskit import transpile
 from qi_utilities.utility_functions.circuit_modifiers import apply_readout_circuit
@@ -171,3 +173,32 @@ class BaseMeasurement:
             ro_corrected_probs_per_qubit.append(ro_corrected_probs_qubit)
 
         return ro_corrected_probs_per_qubit
+    
+    def _load_probs_per_n_qubits(self,
+                                 job_timestamp: str,
+                                 directory: str = None):
+        """
+        Args:
+            job_timestamp (str):
+                Should be given as "YYYYMMDD_HHMMSS".
+
+        """
+
+        if directory is not None:
+            project_dir = Path(directory)
+        else:
+            project_dir = Path.home() / "Documents" / "QuantumInspireProjects"
+
+        json_file_path = None
+        pattern = f"*_data_{job_timestamp}*.json"
+        for path in project_dir.rglob(pattern):
+            if path.is_file():
+                json_file_path = path
+                break
+        if json_file_path is None:
+            raise ValueError(f"No JSON file found for job timestamp: {job_timestamp}")
+        with open(json_file_path, 'r') as file:
+            json_data = json.load(file)
+
+        self.result_probs_per_n_qubits = [json_data["Processed data"][key] for key in json_data["Processed data"].keys()]
+        return json_data # return the whole data anyways
