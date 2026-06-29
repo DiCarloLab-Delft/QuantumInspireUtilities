@@ -200,5 +200,11 @@ class BaseMeasurement:
         with open(json_file_path, 'r') as file:
             json_data = json.load(file)
 
+        self.project_name = json_data['Experiment name']
+        self.project_dir = json_file_path.parent
+        self.date_timestamp = job_timestamp.split('_')[0]
+        self.job_timestamp = job_timestamp.split('_')[1]
+        self.backend_name = json_data["Backend name"]
+        self.num_shots = json_data["Number of shots"]
         self.result_probs_per_n_qubits = [json_data["Processed data"][key] for key in json_data["Processed data"].keys()]
         return json_data # return the whole data anyways

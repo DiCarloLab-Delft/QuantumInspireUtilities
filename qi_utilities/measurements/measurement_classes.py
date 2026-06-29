@@ -98,6 +98,11 @@ class RabiMeasurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points = use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -206,8 +211,8 @@ class RabiMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'Rabi oscillation'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
-                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.date_timestamp}_{self.job_timestamp}')
         
                 labels = []
                 for step_idx in range(len(rotation_angles)):
@@ -234,35 +239,53 @@ class RabiMeasurement(BaseMeasurement):
             ax.plot([], [], ' ', label=r'$d=$' + f'{offset_fit:.2f}')
             ax.legend(loc='center left', bbox_to_anchor=(1, 0.7))
             rabi_fig_path = (
-                Path(self.record.project_dir)
-                / f"rabi_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+                Path(self.project_dir)
+                / f"rabi_plot_{self.qubit_labels[qubit_idx]}_{self.date_timestamp}_{self.job_timestamp}.png"
             )
             fig.savefig(rabi_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
         ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         rabi_all_fig_path = (
-            Path(self.record.project_dir)
-            / f"rabi_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            Path(self.project_dir)
+            / f"rabi_plot_ALL_{self.date_timestamp}_{self.job_timestamp}.png"
         )
         fig_all.savefig(rabi_all_fig_path, dpi=300, bbox_inches='tight')
         plt.close(fig_all)
 
         self.experiment_data = {}
-        self.experiment_data["Experiment name"] = self.record.project_name
-        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Experiment name"] = self.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Rotation angles [rad]"] = rotation_angles
         self.experiment_data["Rotation axis"] = rotation_axis
         self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["Rabi amplitudes"] = self.rabi_amplitudes
         json_file_path = (
-            Path(self.record.project_dir)
-            / f"rabi_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+            Path(self.project_dir)
+            / f"rabi_data_{self.date_timestamp}_{self.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        rotation_angles = json_data['Rotation angles [rad]']
+        rotation_axis = json_data['Rotation axis']
+        cls.qubit_list = json_data['Qubit list']
+        cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls,
+                           rotation_angles,
+                           rotation_axis)
+        return json_data
 
 class T1_Measurement(BaseMeasurement):
 
