@@ -50,7 +50,7 @@ After creating a working Python environment (see instructions above) and having 
 
 In order to create your first quantum circuit using the Quantum Inspire SDK, visit https://qutech-delft.github.io/qiskit-quantuminspire/getting_started/submitting.html.
 
-## 3. Error mitigation tools
+## 3. Error mitigation module
 This module contains utility functions enabling quantum error mitigation using the zero-noise extrapolation (ZNE) technique on the superconducting backends of Quantum Inspire. These tools focus on the CZ gate, as this is the only native 2-qubit gate of the Tuna backends, but they can in principle be used for any other kind of two-qubit gate on any hardware.
 
 The module contains the following tools for performing error mitigation, (along with their section in the tutorial).
