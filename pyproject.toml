@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qi-utilities"
-version = "0.2.4"
+version = "0.3.0"
 description = "Package library with utility functions and demonstration notebooks especially suited for the superconducting hardware backends of the cloud quantum computing platform Quantum Inspire."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,7 +22,7 @@ keywords = [
     "quantuminspire",
     "qiskit",
     "quantum computing",
-    "superconducting"
+    "error mitigation"
 ]
 
 classifiers = [
