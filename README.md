@@ -54,10 +54,10 @@ In order to create your first quantum circuit using the Quantum Inspire SDK, vis
 This module contains utility functions enabling quantum error mitigation using the zero-noise extrapolation (ZNE) technique on the superconducting backends of Quantum Inspire. These tools focus on the CZ gate, as this is the only native 2-qubit gate of the Tuna backends, but they can in principle be used for any other kind of two-qubit gate on any hardware.
 
 The module contains the following tools for performing error mitigation, (along with their section in the tutorial).
-1. Pauli twirling (Sec. 3 of the [user tutorial](./qi_utilities/notebook_guides/2.0_error_mitigation.ipynb.ipynb))
-2. Noise learning for CZ gates (Sec. 4 of the [user tutorial](./qi_utilities/notebook_guides/2.0_error_mitigation.ipynb.ipynb))
-3. Probabilistic error amplification (PEA) (Sec. 5 of the [user tutorial](./qi_utilities/notebook_guides/2.0_error_mitigation.ipynb.ipynb))
-4. Zero-noise extrapolation (ZNE) (Sec. 5 of the [user tutorial](./qi_utilities/notebook_guides/2.0_error_mitigation.ipynb.ipynb))
+1. Pauli twirling (Sec. 3 of the [user tutorial](qi_utilities/notebook_guides/2.0_error_mitigation.ipynb))
+2. Noise learning for CZ gates (Sec. 4 of the [user tutorial](qi_utilities/notebook_guides/2.0_error_mitigation.ipynb))
+3. Probabilistic error amplification (PEA) (Sec. 5 of the [user tutorial](qi_utilities/notebook_guides/2.0_error_mitigation.ipynb))
+4. Zero-noise extrapolation (ZNE) (Sec. 5 of the [user tutorial](qi_utilities/notebook_guides/2.0_error_mitigation.ipynb))
 
 ### 3.1. Pauli twirling
 
