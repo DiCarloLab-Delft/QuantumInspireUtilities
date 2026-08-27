@@ -64,7 +64,7 @@ The module contains the following tools for performing error mitigation, (along 
 We describe a noisy CZ gate $\widetilde{\mathrm{CZ}}$ as a general noise channel $\Lambda$ acting before an ideal CZ operation.
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/noisy_cz.jpg" width="500">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/noisy_cz.jpg" width="500">
 </p>
 
 Pauli twirling is used to approximate the general channel $\Lambda$ with a stochastic Pauli error channel $\Lambda_P$, which is diagonal in the Pauli basis. A random two-qubit Pauli $P$ is applied before the CZ gate, and to preserve the ideal action of the circuit, its conjugate $P^\prime = \mathrm{CZ}\ P\ \mathrm{CZ}^\dagger$ is applied after the CZ gate. Averaging over different randomizations diagonalizes the noise channel, such that when acting on Pauli operators it only applies a multiplicative factor $f_i$ called the Pauli fidelity,
@@ -76,20 +76,20 @@ $$
 where $\Lambda_P$ is the Pauli channel and $P_i$ the two-qubit Pauli operator.
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/pauli_twirling.jpg" width="800">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/pauli_twirling.jpg" width="800">
 </p>
 
 ### 3.2. Learning the noise of a CZ gate
 The noise learning tools closely follow the procedure shown by [van den Berg, E., Minev, Z.K., Kandala, A. et al (2023)](https://doi.org/10.1038/s41567-023-02042-2), with the exception that we assume that when multiple CZ gates are performed in parallel, the noise channel can be approximated as multiple two-qubit noise channels acting on the individual CZ gates (assumes no or low CZ crosstalk).
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/multiple_cz.jpg" width="400">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/multiple_cz.jpg" width="400">
 </p>
 
 The first step in the noise learning procedure is to learn the Pauli fidelities of the twirled noise channel $\Lambda_P$. We execute circuits containing a varying number of CZ gate repetitions, and fit exponential decays to the obtained expectation values, in order to extract the Pauli fidelities. However, using this technique one can only learn multiplicative pairs of Pauli fidelities for the CZ gate.
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/exp_decays.png" width="700">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/exp_decays.png" width="700">
 </p>
 
 We use the symmetry condition assumption used by [van den Berg, E., Minev, Z.K., Kandala, A. et al (2023)](https://doi.org/10.1038/s41567-023-02042-2) to solve the issue of the occuring pairs of Pauli fidelities: the two fidelities that appear in each pair are treated as equal. Finally we can fit the noise model and obtain the Pauli error rates ($\lambda_i$).
@@ -99,14 +99,18 @@ The noise amplification closely follows the procedure shown by [Kim, Y., Eddins,
 We can selectively amplify the effective noise of a CZ gate once we have learned its twirled noise $\Lambda_P$. We sample errors from the noise model and apply them before the (Pauli twirled) CZ gate. Averaging over different randomizations adds an additional Pauli channel $\Lambda_P$ in front of the CZ gate with an appropriate scale factor $\alpha$, resulting in an effective noise gain of $G=\alpha+1$.
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/PEA.jpg">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/PEA.jpg" width="700">
+</p>
+
+<p align="center">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/effective_noise_gain.jpg" width="700">
 </p>
 
 ### 3.4. Zero-noise extrapolation (ZNE)
 Once we have executed a circuit at multiple different noise gains $G$, we can use ZNE to get a noise mitigated estimate of the expectation values $E^{\text{ZNE}}$. We perform a fit (linear or exponential) on the measured expectation values $E(G)$; by extrapolating this fit to $G=0$ we get the noise-mitigated estimate of the expectation value.
 
 <p align="center">
-    <img src="notebook_guides/figures/2.0_figures/ZNE.png" width="400">
+    <img src="qi_utilities/notebook_guides/figures/2.0_figures/ZNE.png" width="700">
 </p>
 
 ## 4. TODOs
