@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "qi-utilities"
-version = "0.3.0"
+dynamic = ["version"]
 description = "Package library with utility functions and demonstration notebooks especially suited for the superconducting hardware backends of the cloud quantum computing platform Quantum Inspire."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -59,3 +59,6 @@ include = ["qi_utilities*"]
 
 [tool.setuptools.package-data]
 qi_utilities = ["**/*.json"]
+
+[tool.setuptools_scm]
+
