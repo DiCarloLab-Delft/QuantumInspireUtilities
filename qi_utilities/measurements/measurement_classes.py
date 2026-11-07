@@ -313,6 +313,11 @@ class T1_Measurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -397,8 +402,8 @@ class T1_Measurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'T1 measurement'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
-                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.date_timestamp}_{self.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
             ax.plot(1e6*measurement_times_fit,
                     exponential_fit,
@@ -407,34 +412,50 @@ class T1_Measurement(BaseMeasurement):
                     label='Fit: ' + r'$f(t) = a\cdot\exp (-t/\tau) + b$')
             ax.legend()
             T1_fig_path = (
-                Path(self.record.project_dir)
-                / f"T1_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+                Path(self.project_dir)
+                / f"T1_plot_{self.qubit_labels[qubit_idx]}_{self.date_timestamp}_{self.job_timestamp}.png"
             )
             fig.savefig(T1_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
         ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         T1_all_fig_path = (
-            Path(self.record.project_dir)
-            / f"T1_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            Path(self.project_dir)
+            / f"T1_plot_ALL_{self.date_timestamp}_{self.job_timestamp}.png"
         )
         fig_all.savefig(T1_all_fig_path, dpi=300, bbox_inches='tight')
         plt.close(fig_all)
 
         self.experiment_data = {}
-        self.experiment_data["Experiment name"] = self.record.project_name
-        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Experiment name"] = self.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["T1 values"] = self.T1_values
         json_file_path = (
-            Path(self.record.project_dir)
-            / f"T1_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+            Path(self.project_dir)
+            / f"T1_data_{self.date_timestamp}_{self.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        measurement_times = np.array(json_data['Measurement times [s]'])
+        cls.qubit_list = json_data['Qubit list']
+        cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls,
+                           measurement_times)
+        return json_data
 
 class T2_RamseyMeasurement(BaseMeasurement):
 
@@ -464,6 +485,11 @@ class T2_RamseyMeasurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -811,7 +837,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 ax2 = axes["C"]
                 fig.suptitle(
                     f'T2 Ramsey measurement'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
                     f'\n{self.record.date_timestamp}_{self.record.job_timestamp}',
                     fontsize=14
                 )
@@ -914,7 +940,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
             else:
                 ax.set_title(
                 f'T2 echo measurement'
-                f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
                 f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax.legend()
 
@@ -928,7 +954,9 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Artificial detunings [Hz]"] = artificial_detunings['original']
         self.experiment_data["Artificial detunings minus [Hz]"] = artificial_detunings['minus']
@@ -972,6 +1000,11 @@ class T2_EchoMeasurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -1329,7 +1362,7 @@ class T2_EchoMeasurement(BaseMeasurement):
                 ax2 = axes["C"]
                 fig.suptitle(
                     f'T2 Echo measurement'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
                     f'\n{self.record.date_timestamp}_{self.record.job_timestamp}',
                     fontsize=14
                 )
@@ -1432,7 +1465,7 @@ class T2_EchoMeasurement(BaseMeasurement):
             else:
                 ax.set_title(
                 f'T2 Echo measurement'
-                f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
+                f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
                 f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax.legend()
 
@@ -1446,7 +1479,9 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
         self.experiment_data["Artificial detunings [Hz]"] = artificial_detunings['original']
         self.experiment_data["Artificial detunings minus [Hz]"] = artificial_detunings['minus']
@@ -1504,6 +1539,11 @@ class FlippingMeasurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -1637,8 +1677,8 @@ class FlippingMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'Flipping measurement'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
-                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.date_timestamp}_{self.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
                 
             ax.plot(number_of_flips,
@@ -1662,23 +1702,25 @@ class FlippingMeasurement(BaseMeasurement):
             ax.plot([], [], ' ', label=f'Cos scale factor: {scale_factor_cos:.4f}')
             ax.legend(loc='center left', bbox_to_anchor=(1, 0.73))
             flipping_fig_path = (
-                Path(self.record.project_dir)
-                / f"flipping_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+                Path(self.project_dir)
+                / f"flipping_plot_{self.qubit_labels[qubit_idx]}_{self.date_timestamp}_{self.job_timestamp}.png"
             )
             fig.savefig(flipping_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
         ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         flipping_all_fig_path = (
-            Path(self.record.project_dir)
-            / f"flipping_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            Path(self.project_dir)
+            / f"flipping_plot_ALL_{self.date_timestamp}_{self.job_timestamp}.png"
         )
         fig_all.savefig(flipping_all_fig_path, dpi=300, bbox_inches='tight')
         plt.close(fig_all)
 
         self.experiment_data = {}
-        self.experiment_data["Experiment name"] = self.record.project_name
-        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Experiment name"] = self.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Number of flips"] = number_of_flips
         self.experiment_data["Equator"] = self.equator
         self.experiment_data["Rotation axis"] = self.rotation_axis
@@ -1687,11 +1729,29 @@ class FlippingMeasurement(BaseMeasurement):
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["Flipping parameters"] = self.flipping_parameters
         json_file_path = (
-            Path(self.record.project_dir)
-            / f"flipping_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+            Path(self.project_dir)
+            / f"flipping_data_{self.date_timestamp}_{self.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        number_of_flips = json_data['Number of flips']
+        cls.equator = json_data['Equator']
+        cls.rotation_axis = json_data['Rotation axis']
+        cls.rotation_angle = json_data['Rotation angle']
+        cls.qubit_list = json_data['Qubit list']
+        cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls,
+                           number_of_flips)
+        return json_data
      
 
 class AllXYMeasurement(BaseMeasurement):
@@ -1712,6 +1772,11 @@ class AllXYMeasurement(BaseMeasurement):
                          num_shots=num_shots,
                          use_ro_cal_points=use_ro_cal_points,
                          directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -1803,8 +1868,8 @@ class AllXYMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'AllXY measurement'
-                    f'\n{self.backend.name} processor | num_shots = {self.num_shots}'
-                    f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
+                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.date_timestamp}_{self.job_timestamp}')
         
                 labels = []
                 for label_idx in range(len(AllXY_syndrome_labels)):
@@ -1824,33 +1889,48 @@ class AllXYMeasurement(BaseMeasurement):
                     color = 'red')
             ax.legend()
             allxy_fig_path = (
-                Path(self.record.project_dir)
-                / f"allxy_plot_{self.qubit_labels[qubit_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+                Path(self.project_dir)
+                / f"allxy_plot_{self.qubit_labels[qubit_idx]}_{self.date_timestamp}_{self.job_timestamp}.png"
             )
             fig.savefig(allxy_fig_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
         ax_all.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         allxy_all_fig_path = (
-            Path(self.record.project_dir)
-            / f"allxy_plot_ALL_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+            Path(self.project_dir)
+            / f"allxy_plot_ALL_{self.date_timestamp}_{self.job_timestamp}.png"
         )
         fig_all.savefig(allxy_all_fig_path, dpi=300, bbox_inches='tight')
         plt.close(fig_all)
 
         self.experiment_data = {}
-        self.experiment_data["Experiment name"] = self.record.project_name
-        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Experiment name"] = self.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
+        self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["AllXY syndromes"] = AllXY_syndrome_labels
         self.experiment_data["Processed data"] = {f"{self.qubit_labels[qubit_idx]}":self.result_probs_per_n_qubits[qubit_idx] \
                                                  for qubit_idx in range(len(self.qubit_list))}
         self.experiment_data["AllXY deviations"] = self.allxy_deviations
         json_file_path = (
-            Path(self.record.project_dir)
-            / f"allxy_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+            Path(self.project_dir)
+            / f"allxy_data_{self.date_timestamp}_{self.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        cls.qubit_list = json_data['Qubit list']
+        cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls)
+        return json_data
 
 class ConditionalOscMeasurement(BaseMeasurement):
 
@@ -1885,6 +1965,11 @@ class ConditionalOscMeasurement(BaseMeasurement):
                         n_qubit_routine=2,
                         qubit_groups = qubit_pairs,
                         directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -2055,7 +2140,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
             ax.set_xticklabels(x_labels, rotation=45)
             ax.set_title(
                 f'Conditional oscillation measurement'
-                f'\n{self.backend.name} processor'
+                f'\n{self.backend_name} processor'
                 f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
                     f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
                 f'\nCZ repetitions: {cz_repetitions}'
@@ -2105,7 +2190,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
             ax.set_xticklabels(x_labels, rotation=45)
             ax.set_title(
                 f'Conditional oscillation measurement'
-                f'\n{self.backend.name} processor'
+                f'\n{self.backend_name} processor'
                 f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
                     f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
                 f'\nCZ repetitions: {cz_repetitions}'
@@ -2122,6 +2207,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit pairs"] = qubit_pairs
         self.experiment_data["Rotation angles [rad]"] = angles
@@ -2135,6 +2221,25 @@ class ConditionalOscMeasurement(BaseMeasurement):
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
+    
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        qubit_pairs = json_data['Qubit pairs']
+        angles = json_data['Rotation angles [rad]']
+        cz_repetitions = json_data['CZ repetitions']
+        # cls.qubit_list = json_data['Qubit list']
+        # cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls,
+                           qubit_pairs,
+                           angles,
+                           cz_repetitions)
+        return json_data
     
 class BellStateMeasurement(BaseMeasurement):
 
@@ -2176,6 +2281,11 @@ class BellStateMeasurement(BaseMeasurement):
                         n_qubit_routine=2,
                         qubit_groups = qubit_pairs,
                         directory=directory)
+        self.project_name = self.record.project_name
+        self.project_dir = self.record.project_dir
+        self.date_timestamp = self.record.date_timestamp
+        self.job_timestamp = self.record.job_timestamp
+        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -2296,7 +2406,7 @@ class BellStateMeasurement(BaseMeasurement):
             fig, axes = plt.subplots(1, 3, figsize=(15, 5.5), dpi=300)
             fig.subplots_adjust(top=0.75, wspace=0.3)
             fig.suptitle(
-                f'Bell-state tomography\n{self.backend.name} processor\n'
+                f'Bell-state tomography\n{self.backend_name} processor\n'
                 f'Qubit pair: Q{qubit_pairs[qubit_pair_idx]} | Fidelity = {100*fidelity:.1f} %\n'
                 f'{self.record.date_timestamp}_{self.record.job_timestamp}',
                 fontsize=14
@@ -2348,6 +2458,7 @@ class BellStateMeasurement(BaseMeasurement):
         self.experiment_data = {}
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit pairs"] = qubit_pairs
         self.experiment_data["Bell state"] = bell_state
@@ -2417,6 +2528,23 @@ class BellStateMeasurement(BaseMeasurement):
         )
         rho_mle = build_density_matrix(result.x)
         return rho_mle
+    
+    @classmethod
+    def load_data(cls,
+                  job_timestamp: str,
+                  directory: str = None):
+
+        json_data = super()._load_probs_per_n_qubits(cls,
+                                                     job_timestamp=job_timestamp,
+                                                     directory=directory)
+        qubit_pairs = json_data['Qubit pairs']
+        bell_state = json_data['Bell state']
+        # cls.qubit_list = json_data['Qubit list']
+        # cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls._data_analysis(cls,
+                           qubit_pairs,
+                           bell_state)
+        return json_data
 
 def make_json_serializable(obj):
     if isinstance(obj, np.ndarray):

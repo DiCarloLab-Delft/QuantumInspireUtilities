@@ -5,8 +5,8 @@ from datetime import datetime
 from qiskit import transpile
 from qi_utilities.utility_functions.circuit_modifiers import apply_readout_circuit
 from qi_utilities.utility_functions.raw_data_processing import get_multi_counts, get_multi_probs
-from qi_utilities.utility_functions.readout_correction import (split_raw_shots, extract_ro_assignment_matrix,
-                                                               get_ro_corrected_multi_probs, extract_ro_assignment_matrices)
+from qi_utilities.utility_functions.readout_correction import (split_raw_shots, get_ro_corrected_multi_probs,
+                                                               extract_ro_assignment_matrices)
 from qi_utilities.utility_functions.data_handling import StoreProjectRecord
 
 import warnings
