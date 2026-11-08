@@ -1,3 +1,12 @@
+"""
+Module implementing the generic base class "BaseMeasurement", which handles
+the execution of the quantum circuit(s) of every characterization experiment
+in measurement_classes.py, the storing of the project record, and the processing
+of the raw data shots into (readout-error-mitigated) probabilities.
+
+Authors: Marios Samiotis
+"""
+
 import json
 import numpy as np
 from pathlib import Path
@@ -14,9 +23,23 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class BaseMeasurement:
     """
+    This class is the generic parent class of all measurement classes. It is
+    responsible for executing the experiment quantum circuit(s) on the backend,
+    storing the project record locally, and processing the raw data shots into
+    probabilities per measurement block.
+
     By default all measurement functions should have calibration
     points, meaning that every qc has additional circuits at the end
     for extracting the ro assignment matrix of each qubit
+    (see apply_readout_circuit in circuit_modifiers.py).
+
+    The final processed data are stored in the attribute
+    'result_probs_per_n_qubits', a list containing, for each qubit
+    (or qubit group, for n_qubit_routine > 1), a list of dictionaries
+    with the measurement probabilities of each measurement block.
+    e.g. for qubit_list = [0, 2] and three measurement blocks,
+    result_probs_per_n_qubits = [[{'0': 0.9, '1': 0.1}, {...}, {...}],   # Q0
+                                 [{'0': 0.8, '1': 0.2}, {...}, {...}]]   # Q2
     """
 
     def __init__(self,
@@ -29,7 +52,49 @@ class BaseMeasurement:
                  qubit_groups: list[list] = None,
                  directory: str = None,
                  store_record: bool = True):
-        
+        """
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            qc (QuantumCircuit | list[QuantumCircuit]):
+                The experiment quantum circuit(s), without the readout
+                calibration circuits, which are appended here.
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            n_qubit_routine (int):
+                The number of qubits on which the measurement routine acts
+                jointly, e.g. 1 for single-qubit and 2 for two-qubit experiments.
+
+            qubit_groups (list(list)):
+                An ordered list of lists (of the kind of qubit_list, see definition of
+                extract_ro_assignment_matrix in readout_correction.py) containing the different integer
+                groupings of qubits.
+                e.g. qubit_groups = [[0, 2], [1, 3]].
+                A separate readout assignment matrix is extracted for each group.
+                It must be provided for n_qubit_routine > 1, otherwise it defaults to
+                [[qubit_idx] for qubit_idx in qubit_list].
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+            store_record (bool):
+                If True, the project record is stored locally.
+        """
+
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
               "Initializing measurement routine ...")
@@ -75,7 +140,23 @@ class BaseMeasurement:
     def _create_and_execute_job(self,
                                 directory: str = None,
                                 store_record: bool = True):
-        
+        """
+        This instance method transpiles the quantum circuit(s) to the native
+        gate set of the Tuna backends, without any qubit re-mapping, routing or
+        optimization, so that the experiment is executed exactly as defined.
+        It then executes the job, waits for the result and stores the project
+        record locally (see StoreProjectRecord in data_handling.py).
+
+        Args:
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+            store_record (bool):
+                If True, the project record is stored locally.
+        """
+
         tuna_backends_basis_gates = ['id', 's', 'sdg', 't', 'tdg', 'x', 'rx', 'y', 'ry', 'z', 'rz', 'cz', 'delay', 'reset']
         qc_transpiled = transpile(self.qc,
                                   self.backend,
@@ -113,7 +194,46 @@ class BaseMeasurement:
                       n_qubit_routine: int = 1,
                       check_for_multi_result: bool = True,
                       circuit_idx: int = None):
-        
+        """
+        This instance method splits the raw data shots from the readout
+        calibration shots, extracts the readout assignment matrices, and
+        computes the raw (and readout-error-mitigated) probabilities per
+        measurement block, grouped per n_qubit_routine qubits.
+
+        For a job containing multiple quantum circuits, the probabilities of
+        each circuit are additionally stored in the attributes
+        'multi_raw_data_probs_per_n_qubits' and 'multi_ro_corrected_probs_per_n_qubits'.
+
+        Args:
+            result (Result):
+                The result of a job (project), as returned from
+                result = job.result()
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            qubit_groups (list(list)):
+                An ordered list of lists (of the kind of qubit_list, see definition of
+                extract_ro_assignment_matrix in readout_correction.py) containing the different integer
+                groupings of qubits.
+                e.g. qubit_groups = [[0, 2], [1, 3]].
+                A separate readout assignment matrix is extracted for each group.
+
+            n_qubit_routine (int):
+                The number of qubits on which the measurement routine acts
+                jointly.
+
+            check_for_multi_result (bool):
+                If True, checks whether the job contains multiple quantum circuits
+                and processes each one of them separately.
+
+            circuit_idx (int):
+                The circuit number within a job, since a job can contain
+                multiple quantum circuits.
+                Defaults to None for a job with a single quantum circuit.
+        """
+
         if check_for_multi_result == True:
             self.multi_raw_data_probs_per_n_qubits = []
             self.multi_ro_corrected_probs_per_n_qubits = []
@@ -153,7 +273,24 @@ class BaseMeasurement:
     def _collect_data_per_n_qubits(self,
                                    ro_corrected_probs,
                                    n_qubit_routine: int = 1):
-        
+        """
+        This instance method marginalizes the multi-qubit probabilities of each
+        measurement block onto consecutive groups of n_qubit_routine qubits,
+        following the order of the qubit_list.
+        e.g. for qubit_list = [0, 2, 1, 3] and n_qubit_routine = 2, the
+        probabilities are marginalized onto the groups [0, 2] and [1, 3].
+
+        Args:
+            ro_corrected_probs (list):
+                A list of dictionaries each containing the measurement probabilities
+                of a certain measurement block.
+                e.g. ro_corrected_probs = [{'00': 0.25, '01': 0.25, '10': 0.25, '11': 0.25},
+                                           ...]
+
+            n_qubit_routine (int):
+                The number of qubits in each group.
+        """
+
         binary_list = []
         for binary_str_idx in range(2**n_qubit_routine):
             binary_list.append(np.binary_repr(binary_str_idx, n_qubit_routine))
@@ -178,10 +315,20 @@ class BaseMeasurement:
                                  job_timestamp: str,
                                  directory: str = None):
         """
+        This instance method searches the project directory for the JSON data
+        file of a previously executed measurement, and loads its processed data
+        and metadata into the measurement class attributes. It is used by the
+        load_data class methods of the measurement classes.
+
         Args:
             job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
                 Should be given as "YYYYMMDD_HHMMSS".
 
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
 
         if directory is not None:

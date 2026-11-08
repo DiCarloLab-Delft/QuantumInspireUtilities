@@ -12,6 +12,11 @@ The quantum circuits created in each measurement class are handled similarly
 by a single generic class "BaseMeasurement", which is also responsible for storing
 all relevant project record data, such as the raw shots, circuits executed, etc.
 
+The results of each measurement (plots in PNG format and processed data in JSON
+format) are stored within the project directory. Most measurement classes also
+contain a "load_data()" class method, which loads and re-analyzes the data of
+an already executed measurement given its timestamp.
+
 Authors: Marios Samiotis
 """
 
@@ -75,11 +80,34 @@ class RabiMeasurement(BaseMeasurement):
                  directory: str = None):
         """
         Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
             rotation_angles (np.array):
                 The different rotation angles for the Rabi oscillation
                 expressed in radians [rad].
+
+            rotation_axis (str):
+                The rotation axis of the Bloch sphere, either 'x' or 'y'.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
-        
+
         if len(rotation_angles) < 4:
             raise ValueError("Invalid input rotation_angles. Input rotation_angles "
                              "must have at least 4 entries!")
@@ -118,6 +146,27 @@ class RabiMeasurement(BaseMeasurement):
                         qubit_list: list,
                         rotation_angles: np.array = np.linspace(0, 2*np.pi, num=29),
                         rotation_axis: str = 'x'):
+        """
+        This instance method creates the experiment quantum circuit. For each
+        rotation angle, a measurement block resets the qubits, applies the
+        rotation rx (or ry) and measures all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            rotation_angles (np.array):
+                The different rotation angles for the Rabi oscillation
+                expressed in radians [rad].
+
+            rotation_axis (str):
+                The rotation axis of the Bloch sphere, either 'x' or 'y'.
+        """
 
         bit_idx = 0
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
@@ -147,9 +196,31 @@ class RabiMeasurement(BaseMeasurement):
     def _data_analysis(self,
                        rotation_angles: np.array,
                        rotation_axis: str):
-        
+        """
+        This instance method fits the excited state population of each qubit with
+        the cosine f(x) = a*cos(bx + c) + d (see cos_func in fitting_functions.py),
+        keeping the best out of 30 randomly initialized fits based on the
+        Bayesian Information Criterion (BIC).
+
+        The fitted excited state population at a rotation angle of pi is stored
+        in the attribute 'rabi_amplitudes', with ideal value 1. The plots and the
+        experiment data are stored in the project directory.
+
+        Args:
+            rotation_angles (np.array):
+                The different rotation angles for the Rabi oscillation
+                expressed in radians [rad].
+
+            rotation_axis (str):
+                The rotation axis of the Bloch sphere, either 'x' or 'y'.
+        """
+
         def fit_cosine_function(rotation_angles,
                                 probabilities_excited):
+            """
+            Fits cos_func on the data 30 times with random initial parameters,
+            and returns the lmfit result with the lowest BIC.
+            """
             
             cos_fit = None
             best_bic = np.inf
@@ -274,6 +345,25 @@ class RabiMeasurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -288,6 +378,32 @@ class RabiMeasurement(BaseMeasurement):
         return json_data
 
 class T1_Measurement(BaseMeasurement):
+    """
+    This measurement class implements a T1 measurement, used for obtaining the
+    energy relaxation time T1 of a qubit. The qubit is prepared in its excited
+    state |1> with a pi pulse, left idle for a variable time t, and then measured.
+
+    Due to energy relaxation, the excited state population decays exponentially
+    towards the ground state |0>, as prob(|1>) = a*exp(-t/T1) + b [1, 2]. The
+    relaxation time T1 also sets an upper limit to the decoherence time, T2 <= 2*T1 [1].
+
+    The measurement times are expected to be equidistant starting from t = 0,
+    while the total measurement time should be a few times the expected T1
+    (by default in [3], 4*T1) for a reliable fit. On the Tuna backends, the
+    idle times are applied in integer multiples of the 20 ns cycle time.
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 2, section 2.1.5.
+    [2] Control for Programmable Superconducting Quantum Systems,
+        Michiel Adriaan Rol, PhD Thesis, Delft University of Technology (2020)
+        https://doi.org/10.4233/uuid:0a2ba212-f6bf-4c64-8f3d-b707f1e44953
+        Chapter 3, section 3.3.1.
+    [3] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Transmon.measure_T1()
+    """
 
     def __init__(self,
                  backend,
@@ -298,9 +414,28 @@ class T1_Measurement(BaseMeasurement):
                  directory: str = None):
         """
         Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
             measurement_times (np.array):
                 The measurement times expressed in units of seconds [s].
-        
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         
         qc = self._quantum_circuit(backend=backend,
@@ -332,11 +467,29 @@ class T1_Measurement(BaseMeasurement):
                         backend,
                         qubit_list: list,
                         measurement_times: np.array = np.linspace(0, 150e-6, num=41)):
+        """
+        This instance method creates the experiment quantum circuit. For each
+        measurement time, a measurement block resets the qubits, prepares them
+        in |1> with an X gate, idles for the corresponding time and measures
+        all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            measurement_times (np.array):
+                The measurement times expressed in units of seconds [s].
+        """
 
         cycle_time = 20e-9 # cycle time limitation imposed by the Tuna backend internal software
         total_time = measurement_times[-1]
         num_points = len(measurement_times)
-        dt = total_time / num_points
+        dt = total_time / (num_points - 1)
         bit_idx = 0
 
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
@@ -354,7 +507,7 @@ class T1_Measurement(BaseMeasurement):
             qc.barrier()
 
             for qubit_idx in qubit_list:
-                qc.delay(duration = time_idx * int((dt / cycle_time)),
+                qc.delay(duration = int(np.round(time_idx * dt / cycle_time)),
                         qarg = qubit_idx) # delay in units of cycle_time
             qc.barrier()
 
@@ -367,7 +520,18 @@ class T1_Measurement(BaseMeasurement):
     
     def _data_analysis(self,
                        measurement_times: np.array):
-        
+        """
+        This instance method fits the excited state population of each qubit with
+        the exponential decay f(t) = a*exp(-t/tau) + b (see exp_decay_func in
+        fitting_functions.py). The fitted decay times are stored in the attribute
+        'T1_values' in units of [us], while the plots and the experiment data are
+        stored in the project directory.
+
+        Args:
+            measurement_times (np.array):
+                The measurement times expressed in units of seconds [s].
+        """
+
         self.T1_values = {}
         
         fig_all, ax_all = plt.subplots(dpi=300)
@@ -446,6 +610,25 @@ class T1_Measurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -458,6 +641,45 @@ class T1_Measurement(BaseMeasurement):
         return json_data
 
 class T2_RamseyMeasurement(BaseMeasurement):
+    """
+    This measurement class implements a Ramsey experiment, used for obtaining
+    the dephasing time T2* of a qubit, as well as the detuning of the qubit
+    from its drive frequency. The qubit is brought to the equator of the Bloch
+    sphere with a pi/2 pulse, left to evolve freely for a variable time t, and
+    rotated back with a second pi/2 pulse prior to measurement [1].
+
+    A qubit detuning acts as a continuous Z rotation during the free evolution,
+    while dephasing decays the oscillation, so that the excited state population
+    follows the damped oscillation prob(|1>) = a*exp(-t/T2*)*cos(2*pi*f*t + phi) + b.
+
+    In order to distinguish the decay from the oscillation, an artificial
+    detuning f_art is imposed by a virtual Z rotation of angle -2*pi*f_art*t
+    prior to the second pi/2 pulse, which is equivalent to sweeping the phase of
+    the second pi/2 pulse [1]. Here f_art = 5 / measurement_times[-1], giving
+    five oscillations within the measurement window [2]. The residual qubit
+    detuning is the difference between the fitted frequency f and f_art [1].
+
+    The measurement times are expected to be equidistant starting from t = 0.
+    On the Tuna backends, the idle times are applied in integer multiples of
+    the 20 ns cycle time.
+
+    The data are additionally fitted with a double damped oscillation and
+    analyzed with an FFT, in order to detect a double beating (two oscillation
+    frequencies, e.g. due to a qubit frequency switching between two values).
+    If a double beating is detected, based on the BIC difference of the two fits
+    or the number of FFT peaks, the experiment is re-launched with two adjusted
+    artificial detunings f' = |f_art - (f1+f2)/2| and f' = f_art + (f1+f2)/2,
+    and T2* is extracted from the configuration in which a single damped
+    oscillation describes the data best.
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 5, section 5.2.2.
+    [2] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Transmon.measure_ramsey()
+    """
 
     def __init__(self,
                  backend,
@@ -468,9 +690,28 @@ class T2_RamseyMeasurement(BaseMeasurement):
                  directory: str = None):
         """
         Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
             measurement_times (np.array):
                 The measurement times expressed in units of seconds [s].
-        
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         # Here 5 is set for five periods
         self.artificial_detunings = 5 / measurement_times[-1] * np.ones(len(qubit_list))
@@ -505,11 +746,33 @@ class T2_RamseyMeasurement(BaseMeasurement):
                          qubit_list: list,
                          measurement_times: np.array,
                          artificial_detunings: list[float]):
+        """
+        This instance method creates the experiment quantum circuit. For each
+        measurement time, a measurement block resets the qubits, applies an
+        rx(pi/2) pulse, idles for the corresponding time, applies the virtual
+        Z rotation of the artificial detuning and a second rx(pi/2) pulse, and
+        measures all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            measurement_times (np.array):
+                The measurement times expressed in units of seconds [s].
+
+            artificial_detunings (list[float]):
+                The artificial detuning of each qubit expressed in units of [Hz].
+        """
 
         cycle_time = 20e-9 # cycle time limitation imposed by the Tuna backend internal software
         total_time = measurement_times[-1]
         num_points = len(measurement_times)
-        dt = total_time / num_points
+        dt = total_time / (num_points - 1)
         bit_idx = 0
 
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
@@ -529,13 +792,13 @@ class T2_RamseyMeasurement(BaseMeasurement):
 
             # delay in units of cycle_time
             for qubit_idx in qubit_list:
-                qc.delay(duration = time_idx * int((dt / cycle_time)),
+                qc.delay(duration = int(np.round(time_idx * dt / cycle_time)),
                         qarg = qubit_idx)
             qc.barrier()
 
             # adding the artificial detuning which rotates the qubit state
-            for qubit_idx in qubit_list:
-                qc.rz(- (2*np.pi) * artificial_detunings[qubit_idx] * (time_idx*dt),
+            for list_idx, qubit_idx in enumerate(qubit_list):
+                qc.rz(- (2*np.pi) * artificial_detunings[list_idx] * (time_idx*dt),
                     qubit_idx)
             qc.barrier()
 
@@ -553,11 +816,37 @@ class T2_RamseyMeasurement(BaseMeasurement):
     
     def _data_analysis(self,
                        measurement_times: np.array):
+        """
+        This instance method fits the excited state population of each qubit with
+        both a single and a double damped oscillation (see damped_osc_func and
+        double_damped_osc_func in fitting_functions.py), keeping the best out of
+        multiple randomly initialized fits based on the Bayesian Information
+        Criterion (BIC), and computes the FFT of the data.
+
+        A double beating is detected when the relative BIC difference of the two
+        fits exceeds 30%, or when more than one peak is found in the FFT. In that
+        case, the experiment is re-launched with the two adjusted artificial
+        detunings (see the class description), and the decay time of the
+        configuration with the smallest relative BIC difference is kept.
+
+        The fitted decay times are stored in the attribute 'T2_ramsey_values' in units
+        of [us], while the plots and the experiment data are stored in the project
+        directory.
+
+        Args:
+            measurement_times (np.array):
+                The measurement times expressed in units of seconds [s].
+        """
         
         def fit_dumped_osc_function(measurement_times,
                                     probabilities_excited,
                                     artificial_detuning,
                                     damped_osc_freq_lim: int):
+            """
+            Fits damped_osc_func on the data 50 times with random initial parameters,
+            and returns the lmfit result with the lowest BIC. The fitted frequency
+            is bounded in [artificial_detuning/4, damped_osc_freq_lim*artificial_detuning].
+            """
             
             damped_oscillation_fit = None
             best_bic = np.inf
@@ -593,6 +882,10 @@ class T2_RamseyMeasurement(BaseMeasurement):
         def fit_double_dumped_osc_function(measurement_times,
                                            probabilities_excited,
                                            artificial_detuning):
+            """
+            Fits double_damped_osc_func on the data 30 times with random initial
+            parameters, and returns the lmfit result with the lowest BIC.
+            """
 
             double_damped_oscillation_fit = None
             best_bic = np.inf
@@ -766,11 +1059,11 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 artificial_detunings['minus'][qubit_idx] = np.abs(original_detuning - (f1+f2)/2)
                 artificial_detunings['plus'][qubit_idx] = original_detuning + (f1+f2)/2
 
-        if len(fitted_double_osc_pass) != 0:
+        if any(fitted_double_osc_pass):
             double_beating_labels = []
             for qubit_idx in range(len(self.qubit_list)):
                 if fitted_double_osc_pass[qubit_idx] == True:
-                    double_beating_labels.append(f"Q{qubit_idx}")
+                    double_beating_labels.append(self.qubit_labels[qubit_idx])
             timestamp_now = datetime.now().replace(microsecond=0)
             print(f"[{timestamp_now}] "
                 "Detected double beating for qubits "
@@ -809,7 +1102,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                                                                                          artificial_detunings[config[idx]][qubit_idx])
                     bic_avgs[config[idx]] = (damped_osc_fits[config[idx]].bic+double_damped_osc_fits[config[idx]].bic) /2
                     bic_diffs[config[idx]] = np.abs(damped_osc_fits[config[idx]].bic-double_damped_osc_fits[config[idx]].bic) \
-                                            / np.abs(bic_avg)
+                                            / np.abs(bic_avgs[config[idx]])
 
                 if bic_diffs['minus'] < bic_diffs['plus']:
                     winning_config = 'minus'
@@ -939,7 +1232,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 ax2.legend(loc='center left', bbox_to_anchor=(-0.43, 0.8))
             else:
                 ax.set_title(
-                f'T2 echo measurement'
+                f'T2 Ramsey measurement'
                 f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
                 f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax.legend()
@@ -973,6 +1266,37 @@ class T2_RamseyMeasurement(BaseMeasurement):
 
 
 class T2_EchoMeasurement(BaseMeasurement):
+    """
+    This measurement class implements a Hahn echo experiment, used for obtaining
+    the echo dephasing time T2echo of a qubit. The sequence is identical to the
+    Ramsey experiment (see T2_RamseyMeasurement), with an additional pi pulse
+    applied exactly in the middle of the free evolution time.
+
+    The pi pulse reverses the direction of the qubit evolution, making the qubit
+    insensitive to low-frequency noise. Since the noise spectrum of superconducting
+    qubits is usually skewed towards low frequencies, typically T2echo > T2* [1].
+
+    Similarly to the Ramsey experiment, an artificial detuning is imposed by a
+    virtual Z rotation prior to the final pi/2 pulse, and the same double beating
+    detection and re-launch procedure is followed.
+
+    The measurement times are expected to be equidistant starting from t = 0.
+    On the Tuna backends, each half of the free evolution time is applied in
+    integer multiples of the 20 ns cycle time, therefore the measurement times
+    should be integer multiples of 40 ns.
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 5, section 5.2.2 (footnote on the Hahn echo).
+    [2] Control for Programmable Superconducting Quantum Systems,
+        Michiel Adriaan Rol, PhD Thesis, Delft University of Technology (2020)
+        https://doi.org/10.4233/uuid:0a2ba212-f6bf-4c64-8f3d-b707f1e44953
+        Chapter 3, section 3.3 (Table 3.1).
+    [3] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Transmon.measure_echo()
+    """
 
     def __init__(self,
                  backend,
@@ -983,9 +1307,29 @@ class T2_EchoMeasurement(BaseMeasurement):
                  directory: str = None):
         """
         Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
             measurement_times (np.array):
-                The measurement times expressed in units of seconds [s].
-        
+                The total free evolution times (between the two pi/2 pulses)
+                expressed in units of seconds [s].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
         # Here 5 is set for five periods
         self.artificial_detunings = 5 / measurement_times[-1] * np.ones(len(qubit_list))
@@ -1020,11 +1364,35 @@ class T2_EchoMeasurement(BaseMeasurement):
                          qubit_list: list,
                          measurement_times: np.array,
                          artificial_detunings: list[float]):
+        """
+        This instance method creates the experiment quantum circuit. For each
+        measurement time, a measurement block resets the qubits, applies an
+        rx(pi/2) pulse, idles for half the measurement time, applies an rx(pi)
+        echo pulse, idles for the second half, applies the virtual Z rotation of
+        the artificial detuning and a second rx(pi/2) pulse, and measures all
+        qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            measurement_times (np.array):
+                The total free evolution times (between the two pi/2 pulses)
+                expressed in units of seconds [s].
+
+            artificial_detunings (list[float]):
+                The artificial detuning of each qubit expressed in units of [Hz].
+        """
 
         cycle_time = 20e-9 # cycle time limitation imposed by the Tuna backend internal software
         total_time = measurement_times[-1]
         num_points = len(measurement_times)
-        dt = total_time / num_points
+        dt = total_time / (num_points - 1)
         bit_idx = 0
 
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
@@ -1044,7 +1412,7 @@ class T2_EchoMeasurement(BaseMeasurement):
     
             # delay/2 in units of cycle_time
             for qubit_idx in qubit_list:
-                qc.delay(duration = time_idx * int(((dt/2) / cycle_time)),
+                qc.delay(duration = int(np.round(time_idx * (dt/2) / cycle_time)),
                         qarg = qubit_idx)
             qc.barrier()
             # applying the echo pulse
@@ -1053,13 +1421,13 @@ class T2_EchoMeasurement(BaseMeasurement):
             qc.barrier()
             # delay/2 in units of cycle_time
             for qubit_idx in qubit_list:
-                qc.delay(duration = time_idx * int(((dt/2) / cycle_time)),
+                qc.delay(duration = int(np.round(time_idx * (dt/2) / cycle_time)),
                         qarg = qubit_idx)
             qc.barrier()
 
             # adding the artificial detuning which rotates the qubit state
-            for qubit_idx in qubit_list:
-                qc.rz(- (2*np.pi) * artificial_detunings[qubit_idx] * (time_idx*dt),
+            for list_idx, qubit_idx in enumerate(qubit_list):
+                qc.rz(- (2*np.pi) * artificial_detunings[list_idx] * (time_idx*dt),
                     qubit_idx)
             qc.barrier()
 
@@ -1077,11 +1445,37 @@ class T2_EchoMeasurement(BaseMeasurement):
     
     def _data_analysis(self,
                        measurement_times: np.array):
+        """
+        This instance method fits the excited state population of each qubit with
+        both a single and a double damped oscillation (see damped_osc_func and
+        double_damped_osc_func in fitting_functions.py), keeping the best out of
+        multiple randomly initialized fits based on the Bayesian Information
+        Criterion (BIC), and computes the FFT of the data.
+
+        A double beating is detected when the relative BIC difference of the two
+        fits exceeds 30%, or when more than one peak is found in the FFT. In that
+        case, the experiment is re-launched with the two adjusted artificial
+        detunings (see the class description), and the decay time of the
+        configuration with the smallest relative BIC difference is kept.
+
+        The fitted decay times are stored in the attribute 'T2_echo_values' in units
+        of [us], while the plots and the experiment data are stored in the project
+        directory.
+
+        Args:
+            measurement_times (np.array):
+                The measurement times expressed in units of seconds [s].
+        """
         
         def fit_dumped_osc_function(measurement_times,
                                     probabilities_excited,
                                     artificial_detuning,
                                     damped_osc_freq_lim: int):
+            """
+            Fits damped_osc_func on the data 50 times with random initial parameters,
+            and returns the lmfit result with the lowest BIC. The fitted frequency
+            is bounded in [artificial_detuning/4, damped_osc_freq_lim*artificial_detuning].
+            """
             
             damped_oscillation_fit = None
             best_bic = np.inf
@@ -1117,6 +1511,10 @@ class T2_EchoMeasurement(BaseMeasurement):
         def fit_double_dumped_osc_function(measurement_times,
                                            probabilities_excited,
                                            artificial_detuning):
+            """
+            Fits double_damped_osc_func on the data 30 times with random initial
+            parameters, and returns the lmfit result with the lowest BIC.
+            """
 
             double_damped_oscillation_fit = None
             best_bic = np.inf
@@ -1290,11 +1688,11 @@ class T2_EchoMeasurement(BaseMeasurement):
                 artificial_detunings['minus'][qubit_idx] = np.abs(original_detuning - (f1+f2)/2)
                 artificial_detunings['plus'][qubit_idx] = original_detuning + (f1+f2)/2
 
-        if len(fitted_double_osc_pass) != 0:
+        if any(fitted_double_osc_pass):
             double_beating_labels = []
             for qubit_idx in range(len(self.qubit_list)):
                 if fitted_double_osc_pass[qubit_idx] == True:
-                    double_beating_labels.append(f"Q{qubit_idx}")
+                    double_beating_labels.append(self.qubit_labels[qubit_idx])
             timestamp_now = datetime.now().replace(microsecond=0)
             print(f"[{timestamp_now}] "
                 "Detected double beating for qubits "
@@ -1333,7 +1731,7 @@ class T2_EchoMeasurement(BaseMeasurement):
                                                                                          artificial_detunings[config[idx]][qubit_idx])
                     bic_avgs[config[idx]] = (damped_osc_fits[config[idx]].bic+double_damped_osc_fits[config[idx]].bic) /2
                     bic_diffs[config[idx]] = np.abs(damped_osc_fits[config[idx]].bic-double_damped_osc_fits[config[idx]].bic) \
-                                            / np.abs(bic_avg)
+                                            / np.abs(bic_avgs[config[idx]])
 
                 if bic_diffs['minus'] < bic_diffs['plus']:
                     winning_config = 'minus'
@@ -1497,6 +1895,32 @@ class T2_EchoMeasurement(BaseMeasurement):
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
 class FlippingMeasurement(BaseMeasurement):
+    """
+    This measurement class implements a flipping experiment, used for the fine
+    calibration of the amplitude of the pi (or pi/2) pulses. With equator = True,
+    the qubit is first brought to the equator of the Bloch sphere with a pi/2 pulse,
+    followed by an even number N of (effective) pi pulses, prior to measurement.
+
+    Ideally, the qubit remains on the equator for any N, with prob(|1>) = 0.5.
+    A small amplitude error accumulates coherently with every additional pulse,
+    amplifying the error syndrome, while the qubit being on the equator makes the
+    measurement first-order sensitive to it [1]. With equator = False, the
+    sequence is first-order insensitive to amplitude errors [2].
+
+    The data are fitted with both a line and a cosine, with the best fit chosen
+    based on the Bayesian Information Criterion (BIC). From each fit a scale factor
+    is extracted, by which the pulse amplitude should be multiplied in order to
+    correct for the amplitude error [2].
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 5, section 5.2.4.
+    [2] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Transmon.measure_flipping() and
+        analysis_v2/timedomain_analysis.py, FlippingAnalysis.get_scale_factor()
+    """
 
     def __init__(self,
                  backend,
@@ -1510,12 +1934,43 @@ class FlippingMeasurement(BaseMeasurement):
                  directory: str = None):
         """
         Args:
-            rotation_angles (np.array):
-                The different rotation angles for the Rabi oscillation
-                expressed in radians [rad].
-            
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            max_number_of_flips (int):
+                The maximum number of (effective) pi pulses, which must be an
+                even integer greater than 0. The number of flips is swept as
+                [0, 2, 4, ..., max_number_of_flips].
+
+            equator (bool):
+                If True, an initial pi/2 pulse brings the qubit to the equator
+                of the Bloch sphere.
+
+            rotation_axis (str):
+                The rotation axis of the Bloch sphere, either 'x' or 'y'.
+
+            rotation_angle (str):
+                Either '180' for pi pulses, or '90' for pairs of pi/2 pulses,
+                each pair forming an effective pi pulse.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
         """
-        
+
         if max_number_of_flips % 2 != 0 or max_number_of_flips <= 0:
             raise ValueError("max_number_of_flips must be an even integer greater than 0!")
         assert rotation_angle in ['90', '180']
@@ -1560,6 +2015,35 @@ class FlippingMeasurement(BaseMeasurement):
                          equator: bool = True,
                          rotation_axis: str = 'x', # 'x' or 'y'
                          rotation_angle: str = '180'): # '180' or '90'
+        """
+        This instance method creates the experiment quantum circuit. For each
+        number of flips N, a measurement block resets the qubits, optionally
+        applies a pi/2 pulse (equator = True), applies N (effective) pi pulses
+        and measures all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            number_of_flips (np.array):
+                The number of (effective) pi pulses of each measurement block.
+
+            equator (bool):
+                If True, an initial pi/2 pulse brings the qubit to the equator
+                of the Bloch sphere.
+
+            rotation_axis (str):
+                The rotation axis of the Bloch sphere, either 'x' or 'y'.
+
+            rotation_angle (str):
+                Either '180' for pi pulses, or '90' for pairs of pi/2 pulses,
+                each pair forming an effective pi pulse.
+        """
 
         bit_idx = 0
         self.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in qubit_list]
@@ -1605,7 +2089,21 @@ class FlippingMeasurement(BaseMeasurement):
     
     def _data_analysis(self,
                        number_of_flips):
-        
+        """
+        This instance method fits the excited state population of each qubit with
+        both a line f(x) = a*x + b and a cosine f(x) = a*cos(bx + c) + 0.5 (see
+        fitting_functions.py), and computes the corresponding amplitude scale
+        factors, 1 / (1 - 4*f_line) with f_line = -a/(2*pi) for the line fit, and
+        1 / (1 + 2*f_cos) with f_cos = sign * b/(2*pi) for the cosine fit, where the
+        sign of f_cos is resolved from the fitted phase c. The scale factors, the BIC of each fit and
+        the best fit are stored in the attribute 'flipping_parameters', while the
+        plots and the experiment data are stored in the project directory.
+
+        Args:
+            number_of_flips (np.array):
+                The number of (effective) pi pulses of each measurement block.
+        """
+
         cos_fit_axis = np.linspace(0, number_of_flips[-1], 300)
         self.flipping_parameters = {f'Q{qubit_idx}': {} for qubit_idx in self.qubit_list}
 
@@ -1653,7 +2151,8 @@ class FlippingMeasurement(BaseMeasurement):
             a_cos_fit, b_cos_fit, c_cos_fit, d_cos_fit = (cos_fit.params['amplitude'].value, cos_fit.params['frequency'].value,
                                                         cos_fit.params['phase'].value, cos_fit.params['offset'].value)
             cosine_curve = cos_func(cos_fit_axis, a_cos_fit, b_cos_fit, c_cos_fit, d_cos_fit)
-            scale_factor_cos = 1 / (1 + 2*b_cos_fit)
+            cos_frequency = (b_cos_fit / (2*np.pi)) * np.sign(np.mod(c_cos_fit, 2*np.pi) - np.pi)
+            scale_factor_cos = 1 / (1 + 2*cos_frequency)
             self.flipping_parameters[self.qubit_labels[qubit_idx]]['Cos scale factor [a.u.]'] = scale_factor_cos
 
             if linear_fit.bic < cos_fit.bic:
@@ -1739,6 +2238,25 @@ class FlippingMeasurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -1755,6 +2273,38 @@ class FlippingMeasurement(BaseMeasurement):
      
 
 class AllXYMeasurement(BaseMeasurement):
+    """
+    This measurement class implements the AllXY experiment, a sensitive test of
+    the single-qubit gates. All 21 combinations of two consecutive rotations,
+    taken from the identity and the x- and y-axis rotations by an angle of pi/2
+    or pi, are applied to the qubit prior to measurement, each combination
+    measured twice (42 measurement blocks in total) [1, 3].
+
+    Ideally, the qubit ends up either in the ground state (first 5 combinations),
+    on the equator of the Bloch sphere (next 12 combinations) or in the excited
+    state (last 4 combinations), giving a characteristic "staircase" pattern for
+    prob(|1>) of 0, 0.5 and 1. Different gate errors, such as amplitude errors and
+    detuning, produce distinct deviations from the ideal staircase, providing a
+    quick diagnosis of the single-qubit gates [1].
+
+    As a figure of merit, the mean absolute deviation from the ideal staircase
+    is extracted [2].
+
+    In the syndrome labels, 'X' ('Y') denotes a pi rotation and 'x' ('y') a pi/2
+    rotation around the x (y) axis, while 'I' denotes the identity.
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 5, section 5.2.3.
+    [2] Control for Programmable Superconducting Quantum Systems,
+        Michiel Adriaan Rol, PhD Thesis, Delft University of Technology (2020)
+        https://doi.org/10.4233/uuid:0a2ba212-f6bf-4c64-8f3d-b707f1e44953
+        Chapter 5, section 5.2.3.
+    [3] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Transmon.measure_allxy()
+    """
 
     def __init__(self,
                  backend,
@@ -1762,7 +2312,29 @@ class AllXYMeasurement(BaseMeasurement):
                  num_shots: int,
                  use_ro_cal_points: bool = True,
                  directory: str = None):
-        
+        """
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+        """
+
         qc = self._quantum_circuit(backend,
                                    qubit_list)
         
@@ -1789,6 +2361,20 @@ class AllXYMeasurement(BaseMeasurement):
     def _quantum_circuit(self,
                          backend,
                          qubit_list):
+        """
+        This instance method creates the experiment quantum circuit. For each of
+        the 21 pulse combinations (repeated twice), a measurement block resets
+        the qubits, applies the two rotations and measures all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_list (list):
+                An ordered list containing the integer indices of the qubits
+                used in the original quantum circuit.
+                e.g. for qubits q0 and q2, qubit_list = [0, 2].
+        """
 
         AllXY_syndromes = [['i', 'i'], ['rx180', 'rx180'], ['ry180', 'ry180'],
                             ['rx180', 'ry180'], ['ry180', 'rx180'],
@@ -1837,7 +2423,13 @@ class AllXYMeasurement(BaseMeasurement):
         return qc
     
     def _data_analysis(self):
-        
+        """
+        This instance method compares the excited state population of each qubit
+        with the ideal AllXY staircase, and stores the mean absolute deviation in
+        the attribute 'allxy_deviations' (ideal value 0). The plots and the
+        experiment data are stored in the project directory.
+        """
+
         AllXY_syndrome_labels = ['II', 'XX', 'YY', 'XY', 'YX', 'xI', 'yI', 'xy',
                                  'yx', 'xY', 'yX', 'Xy', 'Yx', 'xX', 'Xx', 'yY',
                                  'Yy', 'XI', 'YI', 'xx', 'yy']
@@ -1923,6 +2515,25 @@ class AllXYMeasurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -1933,6 +2544,41 @@ class AllXYMeasurement(BaseMeasurement):
         return json_data
 
 class ConditionalOscMeasurement(BaseMeasurement):
+    """
+    This measurement class implements the conditional oscillation experiment,
+    used for characterizing the two-qubit CZ gate by measuring its conditional
+    phase and estimating its leakage [1, 2].
+
+    For each qubit pair [q_targ, q_ctrl], two variants of a Ramsey-like experiment
+    are performed. In the first variant (Off), q_targ is brought to the equator of
+    the Bloch sphere with a pi/2 pulse while q_ctrl remains in the ground state,
+    after which the CZ gate is applied. A recovery pi/2 pulse, around an axis in
+    the equatorial plane set by a swept phase phi, is then applied on q_targ before
+    measuring both qubits simultaneously. In the second variant (On), q_ctrl is
+    additionally excited with a pi pulse before the CZ gate, and returned to the
+    ground state with a second pi pulse before the measurement [1].
+
+    The population of q_targ oscillates with phi in both variants, and the
+    conditional phase corresponds to the phase difference between the two
+    oscillations, ideally 180 degrees for a single CZ gate [1]. Multiple CZ
+    repetitions can be used to amplify phase errors. The missing fraction m is
+    the difference in the average excited state population of q_ctrl between the
+    On and Off variants, from which the leakage of the CZ gate can be estimated as
+    L1 ~ m/2 [1, 3].
+
+    Further reading:
+    [1] Control for Programmable Superconducting Quantum Systems,
+        Michiel Adriaan Rol, PhD Thesis, Delft University of Technology (2020)
+        https://doi.org/10.4233/uuid:0a2ba212-f6bf-4c64-8f3d-b707f1e44953
+        Chapter 7, section 7.5.4, and Chapter 3, section 3.4.1.
+    [2] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 7, section 7.2.
+    [3] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Device.measure_conditional_oscillation() and
+        analysis_v2/timedomain_analysis.py, Conditional_Oscillation_Analysis
+    """
 
     def __init__(self,
                 backend,
@@ -1942,7 +2588,37 @@ class ConditionalOscMeasurement(BaseMeasurement):
                 cz_repetitions: int = 1,
                 use_ro_cal_points: bool = True,
                 directory: str = None):
-        
+        """
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs [q_targ, q_ctrl] to be measured
+                simultaneously, where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            num_angles (int):
+                The number of phases phi of the recovery pi/2 pulse, equally
+                spaced in [0, 2*pi].
+
+            cz_repetitions (int):
+                The number of consecutive CZ gates applied.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+        """
+
         qubit_list = []
         for qubit_pair in qubit_pairs:
             for qubit_idx in qubit_pair:
@@ -1988,7 +2664,34 @@ class ConditionalOscMeasurement(BaseMeasurement):
                          angles: np.array = np.linspace(0.0, 2*np.pi, 19),
                          cz_repetitions: int = 1,
                          cases: list = ['no_excitation', 'excitation']):
-            
+        """
+        This instance method creates the experiment quantum circuit. For each
+        variant (Off: 'no_excitation', On: 'excitation') and each phase phi, a
+        measurement block resets the qubits, applies rx(pi/2) on q_targ (and rx(pi)
+        on q_ctrl for On), applies the CZ gate(s), applies rz(phi) followed by
+        rx(pi/2) on q_targ (and rx(pi) on q_ctrl for On), and measures all qubits
+        simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs [q_targ, q_ctrl] to be measured
+                simultaneously, where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            angles (np.array):
+                The phases phi of the recovery pi/2 pulse expressed in radians [rad].
+
+            cz_repetitions (int):
+                The number of consecutive CZ gates applied.
+
+            cases (list):
+                The experiment variants, 'no_excitation' (Off) and 'excitation' (On).
+        """
+
         qc = QuantumCircuit(backend.num_qubits,
                             2*len(qubit_pairs)*len(angles)*len(cases),
                             name = f'Conditional_Oscillation_{backend.name}')
@@ -2032,6 +2735,28 @@ class ConditionalOscMeasurement(BaseMeasurement):
                        qubit_pairs,
                        angles: np.array = np.linspace(0.0, 2*np.pi, 19),
                        cz_repetitions: int = 1):
+        """
+        This instance method fits the excited state population of q_targ in the
+        Off and On variants with the cosine f(x) = a*cos(bx + c) + d (see cos_func
+        in fitting_functions.py), and extracts for each qubit pair the phases, the
+        conditional phase (phase difference), the oscillation offsets and amplitudes,
+        and the missing fraction of q_ctrl. These are stored in the attribute
+        'cond_osc_params', while the plots and the experiment data are stored in
+        the project directory.
+
+        Args:
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs [q_targ, q_ctrl] to be measured
+                simultaneously, where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            angles (np.array):
+                The phases phi of the recovery pi/2 pulse expressed in radians [rad].
+
+            cz_repetitions (int):
+                The number of consecutive CZ gates applied.
+        """
 
         self.cond_osc_params = {f'Q{qubit_pairs[qubit_pair_idx]}': {} for qubit_pair_idx in range(len(qubit_pairs))}
 
@@ -2226,6 +2951,25 @@ class ConditionalOscMeasurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -2242,6 +2986,34 @@ class ConditionalOscMeasurement(BaseMeasurement):
         return json_data
     
 class BellStateMeasurement(BaseMeasurement):
+    """
+    This measurement class implements two-qubit state tomography of a Bell state,
+    used for benchmarking the preparation of an entangled state on a qubit pair [1].
+
+    One of the four Bell states (phi_plus, phi_minus, psi_plus, psi_minus) is
+    prepared on each qubit pair, and both qubits are measured in each of the 9
+    two-qubit Pauli bases {X, Y, Z} x {X, Y, Z}. From these measurements the
+    expectation values of all 16 two-qubit Pauli operators are obtained, with
+    the single-qubit terms (e.g. IZ) averaged over all bases in which they can
+    be extracted, and <II> = 1 [2].
+
+    Since a density matrix reconstructed directly from the measured expectation
+    values is not guaranteed to be physical, the density matrix is obtained by
+    a least-squares fit of the expectation values over physical density matrices
+    rho = T^dagger T / Tr(T^dagger T), with T a lower triangular matrix, in the
+    spirit of a maximum likelihood estimation [3]. The Bell-state fidelity is
+    then given by F = <psi|rho|psi>, with |psi> the target Bell state.
+
+    Further reading:
+    [1] Entanglement and Quantum Error Correction with Superconducting Qubits,
+        Matthew Reed, PhD Thesis, arXiv:1311.6759 (2013)
+        https://doi.org/10.48550/arXiv.1311.6759
+        Chapter 2, section 2.1.6.
+    [2] Same as [1], Chapter 7, section 7.3.
+    [3] Same as [1], Chapter 7, section 7.3.1.
+    [4] PycQED, https://github.com/DiCarloLab-Delft/PycQED_py3
+        HAL_Device.measure_two_qubit_tomo_bell()
+    """
 
     def __init__(self,
                 backend,
@@ -2250,7 +3022,37 @@ class BellStateMeasurement(BaseMeasurement):
                 num_shots: int,
                 use_ro_cal_points: bool = True,
                 directory: str = None):
-        
+        """
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs to be measured simultaneously,
+                where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            bell_state (str):
+                The target Bell state, one of
+                'phi_plus'  : (|00> + |11>)/sqrt(2),
+                'phi_minus' : (|00> - |11>)/sqrt(2),
+                'psi_plus'  : (|01> + |10>)/sqrt(2),
+                'psi_minus' : (|01> - |10>)/sqrt(2).
+
+            num_shots (int):
+                The number of shots for which the experiment is executed.
+
+            use_ro_cal_points (bool):
+                If True, readout errors are mitigated using the readout
+                calibration points.
+
+            directory (str):
+                Specifies the directory path in which the project record is to be
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+        """
+
         if bell_state not in ["phi_plus", "phi_minus",
                               "psi_plus", "psi_minus"]:
             raise ValueError("Invalid input bell_state. Available states are: "
@@ -2301,10 +3103,35 @@ class BellStateMeasurement(BaseMeasurement):
                         backend,
                         qubit_pairs: list[list[int]],
                         bell_state: str):
+        """
+        This instance method creates the experiment quantum circuit. For each of
+        the 9 tomography bases, a measurement block resets the qubits, prepares the
+        Bell state with single-qubit rotations followed by H and CNOT gates (which are
+        decomposed into native gates, see BaseMeasurement), applies the
+        pre-measurement rotations of the tomography basis (see apply_rotations_from_list
+        in circuit_modifiers.py), and measures all qubits simultaneously.
+
+        Args:
+            backend (QIBackend | NoisySimulator):
+                The hardware or simulator backend.
+
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs to be measured simultaneously,
+                where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            bell_state (str):
+                The target Bell state, one of 'phi_plus', 'phi_minus',
+                'psi_plus', or 'psi_minus'.
+        """
 
         def create_bell_states(qc: QuantumCircuit,
                             qubit_pairs: list[list[int]],
                             bell_state: str):
+            """
+            Appends to qc the reset and Bell-state preparation of each qubit pair.
+            """
             
             bell_state_rotations = {
                 "phi_plus": [0.0, 0.0],
@@ -2350,7 +3177,25 @@ class BellStateMeasurement(BaseMeasurement):
     def _data_analysis(self,
                        qubit_pairs,
                        bell_state):
-        
+        """
+        This instance method computes the expectation values of all 16 two-qubit
+        Pauli operators for each qubit pair, reconstructs the density matrix (see
+        _project_to_density_matrix) and computes the fidelity to the target Bell
+        state. The fidelities are stored in the attribute 'bell_state_fidelities',
+        while the plots and the experiment data are stored in the project directory.
+
+        Args:
+            qubit_pairs (list(list)):
+                An ordered list of qubit pairs to be measured simultaneously,
+                where each pair must be coupled by a CZ gate.
+                A single qubit cannot be used in multiple pairs.
+                e.g. qubit_pairs = [[0, 2], [1, 3]].
+
+            bell_state (str):
+                The target Bell state, one of 'phi_plus', 'phi_minus',
+                'psi_plus', or 'psi_minus'.
+        """
+
         pauli_labels = []
         for i_idx in ['I', 'X', 'Y', 'Z']:
             for j_idx in ['I', 'X', 'Y', 'Z']:
@@ -2476,8 +3321,29 @@ class BellStateMeasurement(BaseMeasurement):
     def _project_to_density_matrix(self,
                                    tomography_dict: dict,
                                    pauli_labels: list):
+        """
+        This instance method reconstructs a physical two-qubit density matrix from
+        the measured Pauli expectation values. The density matrix is parametrized as
+        rho = T^dagger T / Tr(T^dagger T), with T a lower triangular matrix, which
+        guarantees a Hermitian, positive semi-definite matrix of unit trace, and the
+        16 real parameters of T are found by minimizing the sum of squared differences
+        between the predicted Tr(rho P) and the measured expectation values <P>,
+        starting from the identity matrix.
+
+        Args:
+            tomography_dict (dict):
+                The measured expectation values of the two-qubit Pauli operators.
+                e.g. tomography_dict = {'II': 1.0, 'IX': 0.01, ..., 'ZZ': 0.98}
+
+            pauli_labels (list):
+                The ordered list of the 16 two-qubit Pauli operator labels.
+        """
 
         def build_density_matrix(t_params):
+            """
+            Returns the density matrix rho = T^dagger T / Tr(T^dagger T), with T the
+            lower triangular matrix built from the 16 real parameters t_params.
+            """
             T = np.zeros((4, 4), dtype=complex) # will build lower triangular matrix
             idx = 0
             for i in range(4):
@@ -2497,11 +3363,18 @@ class BellStateMeasurement(BaseMeasurement):
             return rho
 
         def expectation_from_rho(rho, pauli_ops):
+            """
+            Returns the expectation values Tr(rho P) for each Pauli operator P.
+            """
             return np.array([
                 np.real(np.trace(rho @ P)) for P in pauli_ops
             ])
 
         def loss(params, measured_expectations, pauli_ops):
+            """
+            Returns the sum of squared differences between the predicted and the
+            measured Pauli expectation values.
+            """
             rho = build_density_matrix(params)
             predicted = expectation_from_rho(rho, pauli_ops)
             return np.sum((predicted - measured_expectations)**2)
@@ -2533,6 +3406,25 @@ class BellStateMeasurement(BaseMeasurement):
     def load_data(cls,
                   job_timestamp: str,
                   directory: str = None):
+        """
+        This class method loads the processed data of an already executed
+        measurement from the local project record, and re-runs the data analysis,
+        storing again the plots and the experiment data in the project directory.
+
+        Args:
+            job_timestamp (str):
+                The experiment timestamp, as shown in the measurement plots.
+                Should be given as "YYYYMMDD_HHMMSS".
+
+            directory (str):
+                Specifies the directory path in which the project record is
+                stored.
+                For no specified path, it defaults to "Documents/QuantumInspireProjects".
+
+        Returns:
+            json_data (dict):
+                The full experiment data, as stored in the JSON file.
+        """
 
         json_data = super()._load_probs_per_n_qubits(cls,
                                                      job_timestamp=job_timestamp,
@@ -2547,6 +3439,15 @@ class BellStateMeasurement(BaseMeasurement):
         return json_data
 
 def make_json_serializable(obj):
+    """
+    This function recursively converts numpy arrays and numpy scalars, also when
+    nested within dictionaries and lists, into native Python types, so that the
+    experiment data can be stored in a JSON format.
+
+    Args:
+        obj:
+            The object to be converted, e.g. the experiment data dictionary.
+    """
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, np.generic):
