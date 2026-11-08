@@ -130,7 +130,6 @@ class RabiMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -282,7 +281,7 @@ class RabiMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'Rabi oscillation'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.date_timestamp}_{self.job_timestamp}')
         
                 labels = []
@@ -327,6 +326,7 @@ class RabiMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Rotation angles [rad]"] = rotation_angles
@@ -452,7 +452,6 @@ class T1_Measurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -566,7 +565,7 @@ class T1_Measurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'T1 measurement'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.date_timestamp}_{self.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
             ax.plot(1e6*measurement_times_fit,
@@ -593,6 +592,7 @@ class T1_Measurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
@@ -730,7 +730,6 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -1130,7 +1129,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
                 ax2 = axes["C"]
                 fig.suptitle(
                     f'T2 Ramsey measurement'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.record.date_timestamp}_{self.record.job_timestamp}',
                     fontsize=14
                 )
@@ -1233,7 +1232,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
             else:
                 ax.set_title(
                 f'T2 Ramsey measurement'
-                f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                 f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax.legend()
 
@@ -1248,6 +1247,7 @@ class T2_RamseyMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
@@ -1348,7 +1348,6 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -1760,7 +1759,7 @@ class T2_EchoMeasurement(BaseMeasurement):
                 ax2 = axes["C"]
                 fig.suptitle(
                     f'T2 Echo measurement'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.record.date_timestamp}_{self.record.job_timestamp}',
                     fontsize=14
                 )
@@ -1863,7 +1862,7 @@ class T2_EchoMeasurement(BaseMeasurement):
             else:
                 ax.set_title(
                 f'T2 Echo measurement'
-                f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                 f'\n{self.record.date_timestamp}_{self.record.job_timestamp}')
                 ax.legend()
 
@@ -1878,6 +1877,7 @@ class T2_EchoMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Measurement times [s]"] = measurement_times
@@ -1998,7 +1998,6 @@ class FlippingMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -2176,7 +2175,7 @@ class FlippingMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'Flipping measurement'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.date_timestamp}_{self.job_timestamp}')
                 ax_obj.set_ylim(-0.05, 1.05)
                 
@@ -2218,6 +2217,7 @@ class FlippingMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["Number of flips"] = number_of_flips
@@ -2348,7 +2348,6 @@ class AllXYMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -2460,7 +2459,7 @@ class AllXYMeasurement(BaseMeasurement):
                 ax_obj.set_ylabel(r'Population $|1\rangle$')
                 ax_obj.set_title(
                     f'AllXY measurement'
-                    f'\n{self.backend_name} processor | num_shots = {self.num_shots}'
+                    f'\n{self.backend_name} {self.backend_type} | num_shots = {self.num_shots}'
                     f'\n{self.date_timestamp}_{self.job_timestamp}')
         
                 labels = []
@@ -2498,6 +2497,7 @@ class AllXYMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit list"] = self.qubit_list
         self.experiment_data["AllXY syndromes"] = AllXY_syndrome_labels
@@ -2645,7 +2645,6 @@ class ConditionalOscMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -2865,7 +2864,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
             ax.set_xticklabels(x_labels, rotation=45)
             ax.set_title(
                 f'Conditional oscillation measurement'
-                f'\n{self.backend_name} processor'
+                f'\n{self.backend_name} {self.backend_type}'
                 f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
                     f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
                 f'\nCZ repetitions: {cz_repetitions}'
@@ -2915,7 +2914,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
             ax.set_xticklabels(x_labels, rotation=45)
             ax.set_title(
                 f'Conditional oscillation measurement'
-                f'\n{self.backend_name} processor'
+                f'\n{self.backend_name} {self.backend_type}'
                 f'\nQubit pair: Q{qubit_pairs[qubit_pair_idx]} || ' + r'$q_{\text{targ.}}=$' + \
                     f'Q{qubit_pairs[qubit_pair_idx][0]}, ' + r'$q_{\text{ctrl}}=$' + f'Q{qubit_pairs[qubit_pair_idx][1]}'
                 f'\nCZ repetitions: {cz_repetitions}'
@@ -2933,6 +2932,7 @@ class ConditionalOscMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit pairs"] = qubit_pairs
         self.experiment_data["Rotation angles [rad]"] = angles
@@ -3087,7 +3087,6 @@ class BellStateMeasurement(BaseMeasurement):
         self.project_dir = self.record.project_dir
         self.date_timestamp = self.record.date_timestamp
         self.job_timestamp = self.record.job_timestamp
-        self.backend_name = self.backend.name
         
         timestamp_now = datetime.now().replace(microsecond=0)
         print(f"[{timestamp_now}] "
@@ -3251,7 +3250,7 @@ class BellStateMeasurement(BaseMeasurement):
             fig, axes = plt.subplots(1, 3, figsize=(15, 5.5), dpi=300)
             fig.subplots_adjust(top=0.75, wspace=0.3)
             fig.suptitle(
-                f'Bell-state tomography\n{self.backend_name} processor\n'
+                f'Bell-state tomography\n{self.backend_name} {self.backend_type}\n'
                 f'Qubit pair: Q{qubit_pairs[qubit_pair_idx]} | Fidelity = {100*fidelity:.1f} %\n'
                 f'{self.record.date_timestamp}_{self.record.job_timestamp}',
                 fontsize=14
@@ -3304,6 +3303,7 @@ class BellStateMeasurement(BaseMeasurement):
         self.experiment_data["Experiment name"] = self.record.project_name
         self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
+        self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
         self.experiment_data["Qubit pairs"] = qubit_pairs
         self.experiment_data["Bell state"] = bell_state

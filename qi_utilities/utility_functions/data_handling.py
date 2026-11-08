@@ -15,6 +15,8 @@ from PIL import ImageFilter
 from qiskit import qasm3
 from qiskit_quantuminspire.cqasm import dumps
 from qiskit_quantuminspire.qi_jobs import QIJob
+from qiskit_quantuminspire.qi_backend import QIBackend
+from qi_utilities.device_simulation.simulators import NoisySimulator
 
 class StoreProjectRecord:
     """
@@ -109,6 +111,12 @@ class StoreProjectRecord:
         """
 
         self.backend_name = job.backend().name
+        if type(job.backend()) == QIBackend:
+            self.backend_type = 'processor'
+        elif type(job.backend()) == NoisySimulator:
+            self.backend_type = 'simulator'
+        else:
+            self.backend_type = None
         self.backend_num_qubits = job.backend().num_qubits
         self.backend_operations = []
         for entry in range(len(job.backend().operations)):
@@ -147,6 +155,7 @@ class StoreProjectRecord:
         general_dict['Project name'] = self.project_name
         general_dict['Project timestamp'] = f"{self.date_timestamp}_{self.job_0_timestamp}"
         general_dict['Backend name'] = self.backend_name
+        general_dict['Backend type'] = self.backend_type
         general_dict['Backend number of qubits'] = self.backend_num_qubits
         general_dict['Backend operations set'] = self.backend_operations
         general_dict['Backend maximum allowed shots'] = self.backend_max_shots

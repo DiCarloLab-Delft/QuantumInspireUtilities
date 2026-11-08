@@ -12,6 +12,8 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from qiskit import transpile
+from qiskit_quantuminspire.qi_backend import QIBackend
+from qi_utilities.device_simulation.simulators import NoisySimulator
 from qi_utilities.utility_functions.circuit_modifiers import apply_readout_circuit
 from qi_utilities.utility_functions.raw_data_processing import get_multi_counts, get_multi_probs
 from qi_utilities.utility_functions.readout_correction import (split_raw_shots, get_ro_corrected_multi_probs,
@@ -110,6 +112,13 @@ class BaseMeasurement:
 
         self.qc = qc    
         self.backend = backend
+        self.backend_name = backend.name
+        if type(backend) == QIBackend:
+            self.backend_type = 'processor'
+        elif type(backend) == NoisySimulator:
+            self.backend_type = 'simulator'
+        else:
+            self.backend_type = None
         self.qubit_list = qubit_list
         self.num_shots = num_shots
 
