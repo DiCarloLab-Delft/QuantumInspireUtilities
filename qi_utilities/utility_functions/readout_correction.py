@@ -156,7 +156,7 @@ def measure_ro_assignment_matrix(backend: QIBackend | NoisySimulator,
     raw_data_shots, ro_mitigation_shots = split_raw_shots(result, qubit_list)
     ro_assignment_matrix = extract_ro_assignment_matrix(ro_mitigation_shots, qubit_list)
 
-    return ro_assignment_matrix
+    return ro_assignment_matrix # take transpose for correct definition
 
 def extract_ro_assignment_matrix(ro_mitigation_shots: list,
                                  qubit_list: list):
@@ -194,7 +194,7 @@ def extract_ro_assignment_matrix(ro_mitigation_shots: list,
         assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                  for state in prepared_states]) / len(ro_mitigation_shots)
 
-    return assignment_probability_matrix.T
+    return assignment_probability_matrix.T # take transpose for correct definition
 
 def extract_ro_assignment_matrices(ro_mitigation_shots: list,
                                    qubit_groups: list[list]):
@@ -227,7 +227,7 @@ def extract_ro_assignment_matrices(ro_mitigation_shots: list,
 
     bit_idx = 0
     assignment_probability_matrices = {}
-    for qubit_list in qubit_groups[::-1]: # this needs to be reversed!
+    for qubit_list in qubit_groups:
         register_length = len(qubit_list)*2**len(qubit_list)
         reduced_ro_mitigation_shots = [bitstring[bit_idx:bit_idx+register_length] for bitstring in ro_mitigation_shots]
         num_qubits = len(qubit_list)
@@ -239,11 +239,9 @@ def extract_ro_assignment_matrices(ro_mitigation_shots: list,
             assignment_probability_matrix[prepared_state_idx] = np.array([ro_counts_per_prepared_states[prepared_state_idx][state]
                                                     for state in prepared_states]) / len(reduced_ro_mitigation_shots)
         
-        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix.T
+        assignment_probability_matrices[f"{qubit_list}"] = assignment_probability_matrix.T # take transpose for correct definition
         bit_idx += register_length
 
-    # reverse the order to the original input
-    assignment_probability_matrices = {f"{qubit_list}": assignment_probability_matrices[f"{qubit_list}"] for qubit_list in qubit_groups}
     return assignment_probability_matrices
 
 def plot_ro_assignment_matrix(ro_assignment_matrix: np.ndarray,
