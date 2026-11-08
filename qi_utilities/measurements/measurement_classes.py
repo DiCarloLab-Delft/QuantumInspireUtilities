@@ -3252,7 +3252,7 @@ class BellStateMeasurement(BaseMeasurement):
             fig.suptitle(
                 f'Bell-state tomography\n{self.backend_name} {self.backend_type}\n'
                 f'Qubit pair: Q{qubit_pairs[qubit_pair_idx]} | Fidelity = {100*fidelity:.1f} %\n'
-                f'{self.record.date_timestamp}_{self.record.job_timestamp}',
+                f'{self.date_timestamp}_{self.job_timestamp}',
                 fontsize=14
             )
             norm = TwoSlopeNorm(vmin=-1.0, vcenter=0.0, vmax=1.0)
@@ -3293,15 +3293,15 @@ class BellStateMeasurement(BaseMeasurement):
             fig.colorbar(im2, cax=cax2)
 
             tomography_fig_path = (
-                Path(self.record.project_dir)
-                / f"tomography_plot_Q{qubit_pairs[qubit_pair_idx]}_{self.record.date_timestamp}_{self.record.job_timestamp}.png"
+                Path(self.project_dir)
+                / f"tomography_plot_Q{qubit_pairs[qubit_pair_idx]}_{self.date_timestamp}_{self.job_timestamp}.png"
             )
             fig.savefig(tomography_fig_path, dpi=300, bbox_inches="tight")
             plt.close(fig)
 
         self.experiment_data = {}
-        self.experiment_data["Experiment name"] = self.record.project_name
-        self.experiment_data["Experiment timestamp"] = f"{self.record.date_timestamp}_{self.record.job_timestamp}"
+        self.experiment_data["Experiment name"] = self.project_name
+        self.experiment_data["Experiment timestamp"] = f"{self.date_timestamp}_{self.job_timestamp}"
         self.experiment_data["Backend name"] = self.backend_name
         self.experiment_data["Backend type"] = self.backend_type
         self.experiment_data["Number of shots"] = self.num_shots
@@ -3312,14 +3312,14 @@ class BellStateMeasurement(BaseMeasurement):
         self.experiment_data["Tomography data"] = all_tomographies
         self.experiment_data["Bell-state fidelities"] = self.bell_state_fidelities
         json_file_path = (
-            Path(self.record.project_dir)
-            / f"tomography_data_{self.record.date_timestamp}_{self.record.job_timestamp}.json"
+            Path(self.project_dir)
+            / f"tomography_data_{self.date_timestamp}_{self.job_timestamp}.json"
         )
         with open(json_file_path, 'w') as file:
             json.dump(make_json_serializable(self.experiment_data), file, indent=3)
 
-    def _project_to_density_matrix(self,
-                                   tomography_dict: dict,
+    @staticmethod
+    def _project_to_density_matrix(tomography_dict: dict,
                                    pauli_labels: list):
         """
         This instance method reconstructs a physical two-qubit density matrix from
@@ -3431,8 +3431,8 @@ class BellStateMeasurement(BaseMeasurement):
                                                      directory=directory)
         qubit_pairs = json_data['Qubit pairs']
         bell_state = json_data['Bell state']
-        # cls.qubit_list = json_data['Qubit list']
-        # cls.qubit_labels = [f"Q{qubit_idx}" for qubit_idx in cls.qubit_list]
+        cls.tomography_bases = ['XX', 'YX', 'ZX', 'XY', 'YY', 'ZY', 'XZ', 'YZ', 'ZZ']
+        cls.single_qubit_terms = ['IX', 'IY', 'IZ', 'XI', 'YI', 'ZI']
         cls._data_analysis(cls,
                            qubit_pairs,
                            bell_state)
