@@ -20,6 +20,8 @@ from qi_utilities.utility_functions.raw_data_processing import (
     get_raw_data,
 )
 from qiskit import QuantumCircuit, transpile
+from qiskit_quantuminspire.qi_backend import QIBackend
+from qi_utilities.device_simulation.simulators import NoisySimulator
 from tqdm.autonotebook import tqdm
 
 from qi_utilities.error_mitigation.toolkit.helper_functions import (
@@ -332,12 +334,19 @@ class BaseClassExperiment:
 
     def _create_project_data(self) -> None:
         """Create initial metadata."""
+        if type(self.backend) == QIBackend:
+            self.backend_type = 'processor'
+        elif type(self.backend) == NoisySimulator:
+            self.backend_type = 'simulator'
+        else:
+            self.backend_type = None
         project_data = {
             "Experiment name": self.EXPERIMENT_NAME,
             "Timestamp": self.timestamp,
             "Experiment completed successfully": False,
             "Backend info": {
                 "Backend name": self.backend.name,
+                "Backend type": self.backend_type,
                 "Backend number of qubits": self.backend.num_qubits,
                 "Backend maximum allowed shots": self.backend.max_shots,
             },
