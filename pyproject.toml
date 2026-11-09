@@ -44,6 +44,8 @@ dependencies = [
     "qiskit-aer",
     "qiskit-qasm3-import",
     "h5py",
+    "uncertainties",
+    "lmfit"
     "tqdm"
 ]
 

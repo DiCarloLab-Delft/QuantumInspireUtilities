@@ -21,7 +21,8 @@ from qi_utilities.utility_functions.data_handling import StoreProjectRecord
 from qi_utilities.device_simulation.simulators import NoisySimulator
 
 def split_raw_shots(result: Result,
-                    qubit_list: list,
+                    qubit_list: list = None,
+                    ro_register_length: int = None,
                     circuit_nr: int = None):
     """
     This function splits the raw data shots of the measurement result
@@ -38,21 +39,32 @@ def split_raw_shots(result: Result,
             used in the original quantum circuit.
             e.g. for qubits q0 and q2, qubit_list = [0, 2].
 
+        ro_register_length (int):
+            Specifies explicitly the bit register length used for the
+            readout circuits. It overrides the qubit_list entry.
+
         circuit_nr (int):
             The circuit number within a job, since a job can contain
             multiple quantum circuits.
             Defaults to None for a job with a single quantum circuit.
     """
 
-    num_qubits = len(qubit_list)
+    if ro_register_length is not None:
+        pass
+    else:
+        if qubit_list is not None:
+            num_qubits = len(qubit_list)
+            ro_register_length = num_qubits*2**num_qubits
+    if qubit_list is None and ro_register_length is None:
+        raise ValueError("qubit_list and ro_register_length are not allowed to be None at the same time!")
+    
     raw_shots = result.get_memory(circuit_nr)
-
     experiment_shots = []
     ro_mitigation_shots = []
 
     for raw_shots_entry in range(len(raw_shots)):
-        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:num_qubits*2**num_qubits])
-        experiment_shots.append(raw_shots[raw_shots_entry][num_qubits*2**num_qubits::])
+        ro_mitigation_shots.append(raw_shots[raw_shots_entry][0:ro_register_length])
+        experiment_shots.append(raw_shots[raw_shots_entry][ro_register_length::])
     return experiment_shots, ro_mitigation_shots
 
 def get_ro_corrected_multi_probs(raw_data_probs: list[dict],

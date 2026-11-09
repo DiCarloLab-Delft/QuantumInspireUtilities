@@ -137,6 +137,11 @@ def get_multi_probs(raw_data_counts: list[dict]):
 
     return probabilities
 
+def translate_to_Z_basis(pauli_term: str):
+
+    pauli_term = pauli_term.replace("X", "Z")
+    pauli_term = pauli_term.replace("Y", "Z")
+    return pauli_term
 
 def observable_expectation_values_Z_basis(probabilities: list[dict],
                                           observable: str):

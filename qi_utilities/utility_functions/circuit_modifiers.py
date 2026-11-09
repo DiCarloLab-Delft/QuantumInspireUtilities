@@ -89,6 +89,57 @@ def apply_pre_measurement_rotations(qc: QuantumCircuit,
 
     return qc
 
+def apply_rotations_from_list(qc: QuantumCircuit,
+                              observable: str,
+                              qubit_list: list,
+                              bit_register: list = None):
+    """
+    This function applies all necessary pre-rotations prior to the measurement
+    of an observable. It is meant to be applied on a QuantumCircuit object which
+    does not contain any measurement blocks at its end.
+
+    Args:
+        qc (QuantumCircuit):
+            The quantum circuit object.
+
+        observable (str):
+            The observable to be measured, expressed strictly in the Pauli basis,
+            for which the pre-measurement rotations are being applied for.
+            For an n-qubit Pauli string P, where Pauli Pi acts on qubit qi, the order
+            in the string is 'Pn-1,Pn-2,...,P2,P1,P0'.
+            e.g. for the two-qubit observable string 'YX', qubit q0 is measured
+            in the X basis, while qubit q1 is measured in the Y basis.
+
+        bit_register (list):
+            A list specifying the bit register for which the measurements outcomes
+            will be stored in.
+    """
+    
+    reduced_observable = observable.replace("I", "")
+
+    qubits_to_remove = []
+    for pauli_idx in range(len(observable)):
+        if observable[-1 - pauli_idx] == 'I':
+            qubits_to_remove.append(qubit_list[pauli_idx])
+    qubit_list = [entry for entry in qubit_list if entry not in qubits_to_remove]
+
+    for pauli_idx in range(len(reduced_observable)):
+        if reduced_observable[-1 - pauli_idx] == 'I':
+            continue
+        elif reduced_observable[-1 - pauli_idx] == 'X':
+            qc.ry(-np.pi/2, qubit_list[pauli_idx])
+        elif reduced_observable[-1 - pauli_idx] == 'Y':
+            qc.rx(np.pi/2,qubit_list[pauli_idx])
+        elif reduced_observable[-1 - pauli_idx] == 'Z':
+            pass
+
+        if bit_register is not None:
+            qc.measure(qubit_list[pauli_idx], bit_register[pauli_idx])
+        else:
+            qc.measure(qubit_list[pauli_idx], pauli_idx)
+
+    return qc
+
 def apply_readout_circuit(qc: QuantumCircuit,
                           qubit_list: list):
     """
